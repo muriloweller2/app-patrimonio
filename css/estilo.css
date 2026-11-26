@@ -321,7 +321,7 @@ dialog.leitor::backdrop { background: #000; }
 .leitor video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .leitor__mira { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 .leitor__mira span {
-  width: min(80vw, 420px); height: min(34vw, 170px); border-radius: 14px;
+  width: min(88vw, 520px); height: min(56vw, 330px); border-radius: 14px;
   border: 3px solid rgb(255 255 255 / 90%); box-shadow: 0 0 0 100vmax rgb(0 0 0 / 45%);
   transition: border-color .15s, transform .15s;
 }
@@ -339,6 +339,10 @@ dialog.leitor::backdrop { background: #000; }
 }
 .leitor__btn.ativo { background: var(--cor-aviso); color: #000; }
 .leitor__btn .ico { width: 24px; height: 24px; }
+.leitor__btn[hidden] { visibility: hidden; display: grid; } /* mantém o texto centralizado */
+.leitor__zoom { font-weight: 700; font-size: 1rem; }
+.leitor__base small { opacity: .75; }
+.leitor video { cursor: crosshair; }
 
 /* ---------- Foto do bem ---------- */
 .foto-previa { position: relative; margin-top: 10px; }
