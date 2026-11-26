@@ -12,6 +12,8 @@ const CONFIRMACOES = 3;
 const JANELA = 6;
 // Zoom inicial: deixa segurar o celular mais longe (a câmera foca melhor e pega a plaqueta inteira).
 const ZOOM_INICIAL = 2;
+// Partes da imagem analisadas em rodízio (1 = inteira; 0.6 e 0.4 = recortes do meio)
+const REGIOES = [1, 0.6, 0.4];
 
 const PREFERIDOS = ['itf', 'code_39', 'code_128', 'codabar', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e'];
 
@@ -36,7 +38,7 @@ export async function lerCodigo(titulo = 'Ler código') {
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } },
       audio: false,
     });
   } catch (e) {
@@ -54,7 +56,7 @@ export async function lerCodigo(titulo = 'Ler código') {
     </div>
     <div class="leitor__base">
       <button type="button" class="leitor__btn leitor__zoom" data-zoom hidden aria-label="Zoom"></button>
-      <p>Enquadre a plaqueta inteira<br><small>Toque na imagem para focar</small></p>
+      <p>Aponte para a plaqueta<br><small>Toque na imagem para focar</small></p>
       <button type="button" class="leitor__btn" data-luz hidden aria-label="Lanterna">${icone('luz')}</button>
     </div>`;
   document.body.appendChild(dlg);
@@ -98,12 +100,15 @@ export async function lerCodigo(titulo = 'Ler código') {
     };
   }
 
-  // Analisa só o meio da imagem (onde fica a mira): menos pixels = leitura mais rápida
+  // Analisa em rodízio a imagem toda e recortes do meio em resolução cheia.
+  // No recorte o código de barras ocupa mais espaço → reconhece de mais longe, com a plaqueta inteira na tela.
   const quadro = document.createElement('canvas');
   const ctx = quadro.getContext('2d', { willReadFrequently: true });
+  let vez = 0;
   function recortar() {
     const w = video.videoWidth, h = video.videoHeight;
-    const cw = Math.round(w * 0.9), ch = Math.round(h * (w > h ? 0.8 : 0.5));
+    const f = REGIOES[vez++ % REGIOES.length];
+    const cw = Math.round(w * f), ch = Math.round(h * f);
     if (quadro.width !== cw) quadro.width = cw;
     if (quadro.height !== ch) quadro.height = ch;
     ctx.drawImage(video, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, cw, ch);
