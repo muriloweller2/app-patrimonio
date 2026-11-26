@@ -362,6 +362,7 @@ dialog.leitor::backdrop { background: #000; }
 .limpar[hidden] { display: none; }
 .limpavel--area .limpar { top: 6px; transform: none; }
 .limpavel--seletor .limpar { right: 42px; }
+.limpavel--seletor .seletor { padding-right: 14px; }
 .limpavel--seletor .seletor__valor { margin-right: 44px; }
 .leitor__topo strong { flex: 1; }
 input[type=search]::-webkit-search-cancel-button { display: none; }
