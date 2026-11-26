@@ -48,5 +48,25 @@ export async function render(el) {
       <div class="cartao"><b>${conta('alterar')}</b><span>Alterados</span></div>
       <div class="cartao"><b>${conta('desincorporar')}</b><span>Desincorp.</span></div>
     </div>
+
+    <p class="secao">Total na planilha</p>
+    <div class="resumo" id="totais">${totais(d)}</div>
   `;
+
+  // Atualiza os totais quando o app recarrega os dados da planilha
+  const caixa = el.querySelector('#totais');
+  const recarregar = async () => {
+    if (!caixa.isConnected) return window.removeEventListener('sync', recarregar);
+    caixa.innerHTML = totais(await lerDados());
+  };
+  window.addEventListener('sync', recarregar);
+}
+
+function totais(d) {
+  const ativos = d.bens.filter((b) => b.status !== 'DESINCORPORADO').length;
+  const desinc = (d.desincorporados || []).length;
+  return `
+    <div class="cartao"><b>${ativos}</b><span>Bens ativos</span></div>
+    <div class="cartao"><b>${desinc}</b><span>Desincorp.</span></div>
+    <div class="cartao"><b>${ativos + desinc}</b><span>Total</span></div>`;
 }

@@ -1,7 +1,7 @@
 import { icone } from '../icones.js';
 import { db } from '../db.js';
 import { lerDados, situacaoNumero } from '../dados.js';
-import { registrar, enviar, situacaoDe } from '../sync.js';
+import { registrar, enviar, situacaoDe, recarregarDados } from '../sync.js';
 import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
 import { esc, normalizar, toast, botoesLimpar, botaoX } from '../ui.js';
 import { lerCodigo } from '../leitor.js';
@@ -173,16 +173,21 @@ export async function render(el) {
     aviso.innerHTML = `${icone('alerta')}<span>${onde}${quando ? ` em ${esc(quando)}` : ''}: <b>${esc(b.descricao || '')}</b>`
       + `${s.bem?.patrimonio && alternativo ? ` (nº ${esc(s.bem.patrimonio)})` : ''}${s.bem?.localizacao ? ` · ${esc(s.bem.localizacao)}` : ''}</span>`;
   }
-  async function conferirPatrimonio() {
-    const s = situacaoNumero(await lerDados(), valorTexto('patrimonio'));
-    avisar('patrimonio', s);
+  // Se o nº parece repetido, confere na planilha na hora (pode ter sido apagado lá)
+  async function conferirNumero(id, campo, alternativo) {
+    let s = situacaoNumero(await lerDados(), valorTexto(id), campo);
+    if (s && await recarregarDados(3000)) s = situacaoNumero(await lerDados(), valorTexto(id), campo);
+    avisar(id, s, alternativo);
     return !s;
   }
-  async function conferirAlternativo() {
-    const d = await lerDados();
-    const n = valorTexto('patrimonioAlt');
-    avisar('patrimonioAlt', situacaoNumero(d, n, 'patrimonioAlt'), true);
-  }
+  const conferirPatrimonio = () => conferirNumero('patrimonio', 'patrimonio', false);
+  const conferirAlternativo = () => conferirNumero('patrimonioAlt', 'patrimonioAlt', true);
+  // Ao abrir a tela, já traz a planilha atualizada
+  recarregarDados().then((ok) => {
+    if (!ok) return;
+    if (valorTexto('patrimonio')) conferirPatrimonio();
+    if (valorTexto('patrimonioAlt')) conferirAlternativo();
+  });
   $('patrimonio').addEventListener('input', () => { marcarOk('patrimonio'); conferirPatrimonio(); });
   $('patrimonioAlt').addEventListener('input', conferirAlternativo);
   $('descricao').addEventListener('input', () => marcarOk('descricao'));

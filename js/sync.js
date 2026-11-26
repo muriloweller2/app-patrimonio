@@ -25,6 +25,29 @@ export async function registrar(action, dados) {
 }
 
 /** Envia o que estiver pendente e atualiza a cópia local com a planilha. */
+/** Recarrega da planilha e reaplica o que ainda não foi aceito. */
+async function baixarDados() {
+  const r = await chamar('dados');
+  if (!r.ok) return false;
+  const { ok, id, ...dados } = r;
+  const resto = (await db.todos('fila')).sort((a, b) => a.criado - b.criado);
+  resto.forEach((op) => aplicarLocal(dados, op));
+  await gravarDados(dados);
+  return true;
+}
+
+/** Busca agora os dados atuais da planilha (ex.: um bem apagado direto na planilha libera o nº na hora). */
+let ultimaBaixa = 0;
+export async function recarregarDados(minimoMs = 0) {
+  if (!navigator.onLine || !configurado() || Date.now() - ultimaBaixa < minimoMs) return false;
+  ultimaBaixa = Date.now();
+  try {
+    const ok = await baixarDados();
+    if (ok) avisar();
+    return ok;
+  } catch { return false; }
+}
+
 export async function enviar() {
   if (enviando || !navigator.onLine || !configurado()) return;
   enviando = true;
@@ -43,14 +66,7 @@ export async function enviar() {
       }
       avisar();
     }
-    // Recarrega da planilha e reaplica o que ainda não foi aceito
-    const r = await chamar('dados');
-    if (r.ok) {
-      const { ok, id, ...dados } = r;
-      const resto = (await db.todos('fila')).sort((a, b) => a.criado - b.criado);
-      resto.forEach((op) => aplicarLocal(dados, op));
-      await gravarDados(dados);
-    }
+    await baixarDados();
     ultimoErro = null;
   } catch (err) {
     ultimoErro = err.message;
