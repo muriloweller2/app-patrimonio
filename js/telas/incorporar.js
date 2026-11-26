@@ -5,6 +5,7 @@ import { registrar, enviar, situacaoDe } from '../sync.js';
 import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
 import { esc, normalizar, toast } from '../ui.js';
 import { lerCodigo } from '../leitor.js';
+import { prepararFoto } from '../foto.js';
 
 export const titulo = 'Incorporar';
 
@@ -69,8 +70,13 @@ export async function render(el) {
       ${seletor('local', 'Localização', true, 'Escolher setor')}
 
       <div class="campo">
-        <span class="rotulo">Foto</span>
+        <span class="rotulo">Foto do bem <small class="dica">opcional</small></span>
+        <input type="file" id="arquivo-foto" accept="image/*" capture="environment" hidden>
         <button type="button" class="botao botao--sec" id="foto">${icone('camera')} Tirar foto</button>
+        <div class="foto-previa" id="previa" hidden>
+          <img alt="Foto do bem">
+          <button type="button" class="botao botao--sec botao--icone" id="tirar-foto" aria-label="Remover foto">${icone('lixeira')}</button>
+        </div>
       </div>
 
       <button class="botao botao--bloco botao--incorporar" type="submit" id="salvar">${icone('mais')} Salvar bem</button>
@@ -125,7 +131,21 @@ export async function render(el) {
       } catch (e) { toast(e.message, 'erro'); }
     };
   });
-  $('foto').onclick = () => toast('Fotos chegam na etapa 5');
+  // Foto: abre a câmera do celular; a foto é diminuída e mostrada em miniatura
+  let foto = null;
+  function mostrarFoto() {
+    $('previa').hidden = !foto;
+    $('foto').innerHTML = `${icone('camera')} ${foto ? 'Trocar foto' : 'Tirar foto'}`;
+    if (foto) $('previa').querySelector('img').src = foto.url;
+  }
+  $('foto').onclick = () => $('arquivo-foto').click();
+  $('arquivo-foto').onchange = async (e) => {
+    const arq = e.target.files[0];
+    e.target.value = '';
+    if (!arq) return;
+    try { foto = await prepararFoto(arq); mostrarFoto(); } catch { toast('Não consegui usar essa foto', 'erro'); }
+  };
+  $('tirar-foto').onclick = () => { foto = null; mostrarFoto(); };
 
   // Avisa se o nº já existe
   async function conferirPatrimonio() {
@@ -175,7 +195,7 @@ export async function render(el) {
     };
 
     $('salvar').disabled = true;
-    const op = await registrar('incorporar', { bem });
+    const op = await registrar('incorporar', foto ? { bem, foto: { base64: foto.base64, mime: foto.mime } } : { bem });
     await db.gravar('kv', escolha.local, 'ultimaLocalizacao');
 
     // Limpa para o próximo bem, mantendo só a localização
@@ -183,6 +203,7 @@ export async function render(el) {
     Object.assign(escolha, { grupo: null, subgrupo: null, situacao: null });
     atualizarSeletores();
     $('aviso-patrimonio').hidden = true;
+    foto = null; mostrarFoto();
     $('salvar').disabled = false;
     $('patrimonio').focus();
 

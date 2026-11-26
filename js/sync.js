@@ -31,16 +31,17 @@ export async function enviar() {
   avisar();
   try {
     const fila = (await db.todos('fila')).filter((o) => o.estado !== 'erro').sort((a, b) => a.criado - b.criado);
-    if (fila.length) {
-      const ops = fila.map(({ estado, criado, erro, ...o }) => o);
+    for (const pacote of emPacotes(fila)) {
+      const ops = pacote.map(({ estado, criado, erro, ...o }) => o);
       const r = await chamar('lote', { ops });
       if (!r.ok) throw new Error(r.erro);
       for (const res of r.resultados) {
-        const op = fila.find((o) => o.id === res.id);
+        const op = pacote.find((o) => o.id === res.id);
         if (!op) continue;
         if (res.ok) await db.apagar('fila', op.id);
         else await db.gravar('fila', { ...op, estado: 'erro', erro: res.erro });
       }
+      avisar();
     }
     // Recarrega da planilha e reaplica o que ainda não foi aceito
     const r = await chamar('dados');
@@ -85,6 +86,19 @@ export async function tentarDeNovo(id) {
   const op = await db.ler('fila', id);
   if (op) await db.gravar('fila', { ...op, estado: 'pendente', erro: null });
   await enviar();
+}
+
+/** Divide a fila em pacotes com no máximo 4 fotos (fotos demoram para subir ao Drive). */
+function emPacotes(fila, maxFotos = 4) {
+  const pacotes = [];
+  let atual = [], fotos = 0;
+  for (const op of fila) {
+    if (op.foto && fotos >= maxFotos) { pacotes.push(atual); atual = []; fotos = 0; }
+    atual.push(op);
+    if (op.foto) fotos++;
+  }
+  if (atual.length) pacotes.push(atual);
+  return pacotes;
 }
 
 function avisar() {

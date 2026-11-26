@@ -1,6 +1,6 @@
 // Service worker: deixa o app abrir sem internet.
 // Estratégia: tenta a rede (versão mais nova), e se falhar ou demorar usa o cache.
-const CACHE = 'patrimonio-v6';
+const CACHE = 'patrimonio-v7';
 const ARQUIVOS = [
   './',
   'index.html',
@@ -17,6 +17,7 @@ const ARQUIVOS = [
   'js/componentes.js',
   'js/cadastros.js',
   'js/leitor.js',
+  'js/foto.js',
   'js/telas/inicio.js',
   'js/telas/ajustes.js',
   'js/telas/em-breve.js',

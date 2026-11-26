@@ -1,7 +1,7 @@
 // Comunicação com o Google Apps Script (backend da planilha)
 import { lerConfig } from './config.js';
 
-const TEMPO_LIMITE = 25000;
+const TEMPO_LIMITE = 45000; // fotos sobem para o Drive, pode demorar
 
 /**
  * Chama uma ação do Apps Script. Retorna o objeto de resposta ({ok, ...}).

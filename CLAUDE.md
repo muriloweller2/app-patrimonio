@@ -87,4 +87,7 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
   Só verificado com node (sintaxe/imports) — **aguardando teste real do usuário**.
 - Etapa 4 (2026-11-26): `js/leitor.js` = leitor ao vivo (BarcodeDetector, sem tirar foto, exige 2 leituras iguais, vibra, lanterna se houver).
   Botão de leitura no Nº de Patrimônio (plaqueta nova prata, ISC) e no Nº alternativo (plaqueta antiga verde "Santa Casa", não pode ser retirada).
-  Ambas com 6 dígitos e zeros à esquerda (ex.: 001733, 000909). Sem fallback ZXing por enquanto (iPhone não lê). **Aguardando teste real.**
+  Ambas com 6 dígitos e zeros à esquerda (ex.: 001733, 000909). Sem fallback ZXing por enquanto (iPhone não lê). Testado OK pelo usuário.
+- Etapa 5 (2026-11-26): `js/foto.js` diminui a foto (1280px, JPEG 0.72) → vai na op `incorporar` como `foto {base64,mime}`
+  e fica na fila offline. `sync.js` envia em pacotes de até 4 fotos; timeout da API 45 s. Apps Script não mudou
+  (salvarFoto já existia: pasta "Patrimônio - Fotos" no Drive, link na coluna Foto). **Aguardando teste real.**
