@@ -428,7 +428,7 @@ function cabecalhoEntrada(sh, rotulo, dica) {
 
 function configurarConsulta(ss) {
   const sh = ss.getSheetByName(ABAS.CONSULTA) || ss.insertSheet(ABAS.CONSULTA);
-  cabecalhoEntrada(sh, 'Nº Patrimônio:', '← digite o nº (ou o nº da plaqueta antiga) e tecle Enter');
+  cabecalhoEntrada(sh, 'Nº Patrimônio:', '← digite o nº (completo ou parte dele), o nº da plaqueta antiga ou parte da descrição e tecle Enter');
   sh.getRange('B1').setNumberFormat('@');
   sh.setColumnWidth(1, 150); sh.setColumnWidth(2, 140); sh.setColumnWidth(3, 150); sh.setColumnWidth(4, 420);
 }
@@ -493,7 +493,25 @@ function preencherConsulta(ss) {
 
   const cab = CABECALHOS[ABAS.BENS];
   const iAlt = cab.indexOf('Nº Patrimônio Alt.');
-  const bem = linhasDe(ss, ABAS.BENS).find(r => chaveNum(r[0]) === busca || (r[iAlt] && chaveNum(r[iAlt]) === busca));
+  const bens = linhasDe(ss, ABAS.BENS);
+  let bem = bens.find(r => chaveNum(r[0]) === busca || (r[iAlt] && chaveNum(r[iAlt]) === busca));
+
+  // Sem número exato: procura parte do número (1733 acha 001733, 017331...) ou parte da descrição
+  if (!bem) {
+    const iDesc = cab.indexOf('Descrição');
+    const soNumero = /^\d+$/.test(busca);
+    const achados = bens.filter(r => chaveNum(r[0]).includes(busca) || (r[iAlt] && chaveNum(r[iAlt]).includes(busca))
+      || (!soNumero && r[iDesc].toLowerCase().includes(busca)));
+    if (achados.length === 1) bem = achados[0];
+    else if (achados.length > 1) {
+      const cols = ['Nº Patrimônio', 'Nº Patrimônio Alt.', 'Descrição', 'Localização', 'Status'].map(c => cab.indexOf(c));
+      sh.getRange(3, 1).setValue(achados.length + ' bens encontrados. Digite o nº completo em B1 para ver o histórico de um deles.')
+        .setFontColor('#888888');
+      escreverBloco(sh, 4, 'RESULTADOS DA BUSCA', ['Nº Patrimônio', 'Nº Alt.', 'Descrição', 'Setor', 'Status'],
+        achados.slice(0, 200).map(r => cols.map(i => r[i])), 5);
+      return;
+    }
+  }
   const num = bem ? chaveNum(bem[0]) : busca;
   const mesmo = (v) => chaveNum(v) === num;
 

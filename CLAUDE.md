@@ -46,7 +46,7 @@ Situação (valores pendentes), Incorporado por doação (sim/não), Localizaç�
 - **Localizações**: **só o nome** (sem código, sem centro de custo). Seleção com **campo de busca**, nada de rolar listas longas.
 ## Planilha (implementada em `apps-script/Codigo.gs`, função `configurarPlanilha`)
 - **Um arquivo só** (decidido 2026-11-26; arquivos separados e aba por setor foram descartados: conferência lenta/frágil e mudança de setor = mover linha).
-- **Consulta**: digita nº (ou nº alternativo) em B1 → situação atual + histórico (incorporação/alterações/desincorporação).
+- **Consulta**: digita nº, parte do nº (1733 acha 001733; vários = lista de resultados) ou parte da descrição em B1 → situação atual + histórico (incorporação/alterações/desincorporação).
 - **Por Setor**: escolhe o setor em B1 (lista das Localizações) → bens ativos do setor.
   Ambas preenchidas pelo script (gatilho simples `onEdit` + `atualizarVisoes` após cada envio que mexe em bens), **sem fórmulas**
   (a aba antiga "Por Dia" com VSTACK dava erro de análise e foi removida; visão por data vai para o app na etapa 8).
