@@ -224,7 +224,7 @@ textarea.entrada { resize: vertical; min-height: 70px; }
 }
 .seletor .ico { color: var(--texto-suave); width: 20px; height: 20px; }
 .seletor__valor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.seletor.vazio .seletor__valor::before { content: attr(data-vazio); color: var(--texto-suave); }
+.seletor--vazio .seletor__valor::before { content: attr(data-vazio); color: var(--texto-suave); }
 .seletor:disabled { opacity: .5; cursor: not-allowed; }
 
 .campo.invalido .entrada { border-color: var(--cor-desincorporar); background: color-mix(in srgb, var(--cor-desincorporar) 7%, var(--superficie)); }

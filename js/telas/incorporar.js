@@ -101,7 +101,7 @@ export async function render(el) {
   function mostrar(id, txt) {
     const v = $(id).querySelector('.seletor__valor');
     v.textContent = txt || '';
-    $(id).classList.toggle('vazio', !txt);
+    $(id).classList.toggle('seletor--vazio', !txt);
     xSel[id].hidden = !txt;
   }
   function atualizarSeletores() {
