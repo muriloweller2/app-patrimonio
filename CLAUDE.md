@@ -45,7 +45,12 @@ Situação (valores pendentes), Incorporado por doação (sim/não), Localizaç�
 - **Subgrupos**: código + nome, ligados a um grupo (a lista filtra pelo grupo escolhido).
 - **Localizações**: **só o nome** (sem código, sem centro de custo). Seleção com **campo de busca**, nada de rolar listas longas.
 ## Planilha (implementada em `apps-script/Codigo.gs`, função `configurarPlanilha`)
-- **Por Dia**: data em B1 + uma fórmula VSTACK/FILTER com os blocos Incorporações / Alterações / Desincorporações do dia.
+- **Um arquivo só** (decidido 2026-11-26; arquivos separados e aba por setor foram descartados: conferência lenta/frágil e mudança de setor = mover linha).
+- **Consulta**: digita nº (ou nº alternativo) em B1 → situação atual + histórico (incorporação/alterações/desincorporação).
+- **Por Setor**: escolhe o setor em B1 (lista das Localizações) → bens ativos do setor.
+  Ambas preenchidas pelo script (gatilho simples `onEdit` + `atualizarVisoes` após cada envio que mexe em bens), **sem fórmulas**
+  (a aba antiga "Por Dia" com VSTACK dava erro de análise e foi removida; visão por data vai para o app na etapa 8).
+- Abas Grupos/Subgrupos/Localizações/Situações ficam **ocultas** (menu Patrimônio → Mostrar abas de cadastro).
 - **Bens**: estado atual, 1 linha por nº de patrimônio (Status ATIVO/DESINCORPORADO).
 - **Incorporações**, **Alterações** (1 linha por campo alterado, com valor anterior/novo), **Desincorporações**:
   registros com Data, Hora, checkbox "Lançado no Wareline" e ID da operação (evita duplicar reenvios da fila offline).
@@ -91,3 +96,7 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
 - Etapa 5 (2026-11-26): `js/foto.js` diminui a foto (1280px, JPEG 0.72) → vai na op `incorporar` como `foto {base64,mime}`
   e fica na fila offline. `sync.js` envia em pacotes de até 4 fotos; timeout da API 45 s. Apps Script não mudou
   (salvarFoto já existia: pasta "Patrimônio - Fotos" no Drive, link na coluna Foto). **Aguardando teste real.**
+- Reorganização (2026-11-26): abas Consulta e Por Setor; nº repetido conferido em Bens **e** Desincorporações
+  (backend `conferirNovo`/`acharDesincorporado`; app `situacaoNumero` em dados.js avisa ao digitar, compara sem zeros à esquerda;
+  `dados` agora traz `desincorporados`). Teste real revelou que o Apps Script publicado era o da etapa 1:
+  **toda mudança em Codigo.gs exige o usuário colar o código e criar Nova versão da implantação.**

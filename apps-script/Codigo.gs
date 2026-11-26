@@ -10,7 +10,8 @@ const ABAS = {
   INC: 'Incorporações',
   ALT: 'Alterações',
   DES: 'Desincorporações',
-  DIA: 'Por Dia',
+  CONSULTA: 'Consulta',
+  SETOR: 'Por Setor',
   GRUPOS: 'Grupos',
   SUBGRUPOS: 'Subgrupos',
   LOCAIS: 'Localizações',
@@ -76,10 +77,13 @@ function processar(req) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    if (req.action === 'lote') {
-      return { ok: true, resultados: (req.ops || []).map(executarSeguro) };
+    const ops = req.action === 'lote' ? (req.ops || []) : [req];
+    const resultados = ops.map(executarSeguro);
+    // Se mexeu em bens, atualiza as abas Consulta e Por Setor
+    if (ops.some(o => ['incorporar', 'alterar', 'desincorporar'].includes(o.action))) {
+      try { atualizarVisoes(planilha()); } catch (err) { /* não impede o envio */ }
     }
-    return executarSeguro(req);
+    return req.action === 'lote' ? { ok: true, resultados } : resultados[0];
   } finally {
     lock.releaseLock();
   }
@@ -119,7 +123,7 @@ function incorporar(op) {
   if (!b.patrimonio) throw new Error('Informe o nº de patrimônio.');
   if (!b.descricao) throw new Error('Informe a descrição do bem.');
   if (jaProcessado(ABAS.INC, op.id)) return { msg: 'Já enviado antes', duplicado: true };
-  if (acharLinhaBem(b.patrimonio)) throw new Error('Patrimônio ' + b.patrimonio + ' já está cadastrado.');
+  conferirNovo(b.patrimonio);
 
   if (op.foto) b.foto = salvarFoto(op.foto, b.patrimonio);
   const m = momento(op.quando);
@@ -175,6 +179,10 @@ function desincorporar(op) {
     status.setValue('DESINCORPORADO');
     sh.getRange(linha, cab.length).setValue(m.dataHora);
   }
+  else {
+    const des = acharDesincorporado(patrimonio);
+    if (des) throw new Error('Patrimônio ' + patrimonio + ' já foi desincorporado em ' + des.data + '.');
+  }
   if (!descricao) throw new Error('Informe a descrição do bem.');
 
   registrar(ABAS.DES, [m.data, m.hora, patrimonio, descricao, false, op.id || '']);
@@ -200,7 +208,31 @@ function lerDados() {
     subgrupos: linhas(ABAS.SUBGRUPOS).map(r => ({ grupo: r[0], nome: r[1], codigo: r[2] })),
     locais: linhas(ABAS.LOCAIS).map(r => r[0]),
     situacoes: linhas(ABAS.SITUACOES).map(r => r[0]),
+    desincorporados: linhas(ABAS.DES).map(r => ({ data: r[0], patrimonio: r[2], descricao: r[3] })),
   };
+}
+
+/** Recusa incorporar nº que já existe em Bens ou que já foi desincorporado. */
+function conferirNovo(patrimonio) {
+  const linha = acharLinhaBem(patrimonio);
+  if (linha) {
+    const cab = CABECALHOS[ABAS.BENS];
+    const r = aba(ABAS.BENS).getRange(linha, 1, 1, cab.length).getDisplayValues()[0];
+    const col = (c) => r[cab.indexOf(c)];
+    if (col('Status') === 'DESINCORPORADO') {
+      throw new Error('Patrimônio ' + patrimonio + ' foi desincorporado em ' + col('Atualizado em').slice(0, 10) + '. Não pode ser incorporado de novo.');
+    }
+    throw new Error('Patrimônio ' + patrimonio + ' já está incorporado: ' + col('Descrição') + ' – ' + col('Localização') + '.');
+  }
+  const des = acharDesincorporado(patrimonio);
+  if (des) throw new Error('Patrimônio ' + patrimonio + ' foi desincorporado em ' + des.data + '. Não pode ser incorporado de novo.');
+}
+
+function acharDesincorporado(patrimonio) {
+  const sh = aba(ABAS.DES);
+  if (sh.getLastRow() < 2) return null;
+  const achado = sh.getRange(2, 3, sh.getLastRow() - 1, 1).createTextFinder(patrimonio).matchEntireCell(true).findNext();
+  return achado ? { data: sh.getRange(achado.getRow(), 1).getDisplayValue() } : null;
 }
 
 // ───────────────────────── Cadastros auxiliares ─────────────────────────
@@ -321,6 +353,8 @@ function salvarFoto(foto, patrimonio) {
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Patrimônio')
     .addItem('Configurar planilha', 'configurarPlanilha')
+    .addItem('Atualizar Consulta e Por Setor', 'atualizarVisoesMenu')
+    .addItem('Mostrar abas de cadastro', 'mostrarCadastros')
     .addItem('Mostrar token do app', 'mostrarToken')
     .addToUi();
 }
@@ -343,17 +377,27 @@ function configurarPlanilha() {
     sh.autoResizeColumns(1, cab.length);
   });
 
-  configurarPorDia(ss);
+  configurarConsulta(ss);
+  configurarPorSetor(ss);
 
-  // Ordem das abas
-  [ABAS.DIA, ABAS.BENS, ABAS.INC, ABAS.ALT, ABAS.DES, ABAS.GRUPOS, ABAS.SUBGRUPOS, ABAS.LOCAIS, ABAS.SITUACOES]
-    .forEach((nome, i) => { ss.setActiveSheet(ss.getSheetByName(nome)); ss.moveActiveSheet(i + 1); });
-
-  // Remove a aba padrão vazia
+  // Remove a aba antiga "Por Dia" e a aba padrão vazia
+  const antiga = ss.getSheetByName('Por Dia');
+  if (antiga) ss.deleteSheet(antiga);
   ['Página1', 'Sheet1', 'Planilha1'].forEach(n => {
     const sh = ss.getSheetByName(n);
     if (sh && sh.getLastRow() === 0) ss.deleteSheet(sh);
   });
+
+  // Ordem das abas; cadastros ficam ocultos (são mexidos pelo app)
+  const ordem = [ABAS.CONSULTA, ABAS.SETOR, ABAS.BENS, ABAS.INC, ABAS.DES, ABAS.ALT];
+  const ocultas = [ABAS.GRUPOS, ABAS.SUBGRUPOS, ABAS.LOCAIS, ABAS.SITUACOES];
+  [...ordem, ...ocultas].forEach((nome, i) => {
+    const sh = ss.getSheetByName(nome);
+    sh.showSheet(); ss.setActiveSheet(sh); ss.moveActiveSheet(i + 1);
+  });
+  ss.setActiveSheet(ss.getSheetByName(ABAS.CONSULTA));
+  ocultas.forEach(nome => ss.getSheetByName(nome).hideSheet());
+  atualizarVisoes(ss);
 
   if (!props.getProperty('TOKEN')) props.setProperty('TOKEN', Utilities.getUuid().replace(/-/g, ''));
   const msg = 'Planilha configurada!\n\nToken do app (guarde, vai na tela de Configurações do app):\n' + props.getProperty('TOKEN');
@@ -361,37 +405,152 @@ function configurarPlanilha() {
   try { SpreadsheetApp.getUi().alert(msg); } catch (err) { /* rodado pelo editor: veja o Registro de execução */ }
 }
 
-function configurarPorDia(ss) {
-  const sh = ss.getSheetByName(ABAS.DIA) || ss.insertSheet(ABAS.DIA);
-  sh.clear();
-  sh.getRange('A1').setValue('Data:').setFontWeight('bold');
-  sh.getRange('B1').setFormula('=TODAY()').setNumberFormat('dd/mm/yyyy')
-    .setBackground('#fff3c4').setFontWeight('bold')
-    .setDataValidation(SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(false).build());
-  sh.getRange('C1').setValue('← digite a data que quer ver').setFontColor('#888888');
+// ───────────────────────── Abas de consulta (preenchidas pelo script) ─────────────────────────
 
-  const bloco = (titulo, nome, ultimaCol) =>
-    `"${titulo}", '${nome}'!A1:${ultimaCol}1, ` +
-    `IFERROR(FILTER('${nome}'!A2:${ultimaCol}, '${nome}'!A2:A=$B$1), "— nenhum registro —")`;
-  sh.getRange('A3').setFormula(
-    '=IFNA(VSTACK(' +
-    bloco('INCORPORAÇÕES', ABAS.INC, 'S') + ', "", ' +
-    bloco('ALTERAÇÕES', ABAS.ALT, 'I') + ', "", ' +
-    bloco('DESINCORPORAÇÕES', ABAS.DES, 'F') +
-    '), "")'
-  );
-  sh.getRange('A3:A').setNumberFormat('dd/mm/yyyy');
+const COR_TITULO = '#1f4e5f';
+const ACAO_COR = { 'Incorporação': '#d9f2e3', 'Alteração': '#fff0c2', 'Desincorporação': '#fbd9d6' };
 
-  const destaque = (texto, cor) => SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=$A3="${texto}"`).setBold(true).setBackground(cor)
-    .setRanges([sh.getRange('A3:T')]).build();
-  sh.setConditionalFormatRules([
-    destaque('INCORPORAÇÕES', '#d9f2e3'),
-    destaque('ALTERAÇÕES', '#fff0c2'),
-    destaque('DESINCORPORAÇÕES', '#fbd9d6'),
-    destaque('Data', '#eeeeee'),
-  ]);
+/** "001733" e "1733" contam como o mesmo número. */
+const chaveNum = (v) => texto(v).replace(/^0+(?=\d)/, '').toLowerCase();
+
+function linhasDe(ss, nome) {
+  const sh = ss.getSheetByName(nome);
+  return !sh || sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getDisplayValues();
+}
+
+function cabecalhoEntrada(sh, rotulo, dica) {
+  sh.getRange('A1').setValue(rotulo).setFontWeight('bold');
+  sh.getRange('B1').setBackground('#fff3c4').setFontWeight('bold').setFontSize(12)
+    .setBorder(true, true, true, true, false, false, '#c9a400', SpreadsheetApp.BorderStyle.SOLID);
+  sh.getRange('C1').setValue(dica).setFontColor('#888888');
   sh.setFrozenRows(1);
+}
+
+function configurarConsulta(ss) {
+  const sh = ss.getSheetByName(ABAS.CONSULTA) || ss.insertSheet(ABAS.CONSULTA);
+  cabecalhoEntrada(sh, 'Nº Patrimônio:', '← digite o nº (ou o nº da plaqueta antiga) e tecle Enter');
+  sh.getRange('B1').setNumberFormat('@');
+  sh.setColumnWidth(1, 150); sh.setColumnWidth(2, 140); sh.setColumnWidth(3, 150); sh.setColumnWidth(4, 420);
+}
+
+function configurarPorSetor(ss) {
+  const sh = ss.getSheetByName(ABAS.SETOR) || ss.insertSheet(ABAS.SETOR);
+  cabecalhoEntrada(sh, 'Setor:', '← escolha o setor na lista');
+  const locais = ss.getSheetByName(ABAS.LOCAIS).getRange('A2:A');
+  sh.getRange('B1').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(locais, true).setAllowInvalid(false).build());
+  sh.setColumnWidth(2, 180);
+}
+
+/** Gatilho simples: ao digitar na célula B1 de Consulta ou Por Setor, preenche a aba. */
+function onEdit(e) {
+  if (!e || e.range.getA1Notation() !== 'B1') return;
+  const nome = e.range.getSheet().getName();
+  if (nome === ABAS.CONSULTA) preencherConsulta(e.source);
+  if (nome === ABAS.SETOR) preencherPorSetor(e.source);
+}
+
+function atualizarVisoes(ss) {
+  preencherConsulta(ss);
+  preencherPorSetor(ss);
+}
+
+function atualizarVisoesMenu() {
+  atualizarVisoes(SpreadsheetApp.getActiveSpreadsheet());
+}
+
+function mostrarCadastros() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  [ABAS.GRUPOS, ABAS.SUBGRUPOS, ABAS.LOCAIS, ABAS.SITUACOES].forEach(n => ss.getSheetByName(n).showSheet());
+}
+
+function limparAbaixo(sh) {
+  const n = Math.max(sh.getMaxRows() - 2, 1);
+  sh.getRange(3, 1, n, sh.getMaxColumns()).clear().clearDataValidations();
+}
+
+/** Escreve um bloco: título (linha colorida), cabeçalho opcional e linhas. Devolve a próxima linha livre. */
+function escreverBloco(sh, linha, titulo, cab, linhas, largura) {
+  sh.getRange(linha, 1, 1, largura).setBackground(COR_TITULO).setFontColor('#ffffff').setFontWeight('bold');
+  sh.getRange(linha, 1).setValue(titulo);
+  linha++;
+  if (cab) {
+    sh.getRange(linha, 1, 1, largura).setValues([cab]).setFontWeight('bold').setBackground('#eeeeee');
+    linha++;
+  }
+  if (linhas.length) {
+    sh.getRange(linha, 1, linhas.length, largura).setNumberFormat('@').setValues(linhas);
+    linha += linhas.length;
+  }
+  return linha + 1;
+}
+
+function preencherConsulta(ss) {
+  const sh = ss.getSheetByName(ABAS.CONSULTA);
+  if (!sh) return;
+  limparAbaixo(sh);
+  const busca = chaveNum(sh.getRange('B1').getDisplayValue());
+  if (!busca) return;
+
+  const cab = CABECALHOS[ABAS.BENS];
+  const iAlt = cab.indexOf('Nº Patrimônio Alt.');
+  const bem = linhasDe(ss, ABAS.BENS).find(r => chaveNum(r[0]) === busca || (r[iAlt] && chaveNum(r[iAlt]) === busca));
+  const num = bem ? chaveNum(bem[0]) : busca;
+  const mesmo = (v) => chaveNum(v) === num;
+
+  // Histórico de tudo que aconteceu com o bem, em ordem de data
+  const hist = [];
+  const cabInc = CABECALHOS[ABAS.INC];
+  linhasDe(ss, ABAS.INC).filter(r => mesmo(r[2])).forEach(r =>
+    hist.push([r[0], r[1], 'Incorporação', r[cabInc.indexOf('Descrição')] + ' – ' + r[cabInc.indexOf('Localização')]]));
+  linhasDe(ss, ABAS.ALT).filter(r => mesmo(r[2])).forEach(r =>
+    hist.push([r[0], r[1], 'Alteração', r[4] + ': ' + (r[5] || '(vazio)') + ' → ' + (r[6] || '(vazio)')]));
+  linhasDe(ss, ABAS.DES).filter(r => mesmo(r[2])).forEach(r =>
+    hist.push([r[0], r[1], 'Desincorporação', r[3]]));
+  const ordem = (r) => r[0].split('/').reverse().join('') + r[1];
+  hist.sort((a, b) => ordem(a).localeCompare(ordem(b)));
+
+  let linha = 3;
+  if (bem) {
+    const fichas = cab.map((c, i) => [c, bem[i], '', '']).filter(r => r[1]);
+    const ini = linha + 1;
+    linha = escreverBloco(sh, linha, 'SITUAÇÃO ATUAL', null, fichas, 4);
+    sh.getRange(ini, 1, fichas.length, 1).setFontWeight('bold');
+    const iSt = fichas.findIndex(r => r[0] === 'Status');
+    if (iSt >= 0) {
+      sh.getRange(ini + iSt, 2).setFontWeight('bold')
+        .setFontColor(fichas[iSt][1] === 'DESINCORPORADO' ? '#c0392b' : '#1e8449');
+    }
+  } else {
+    linha = escreverBloco(sh, linha, 'SITUAÇÃO ATUAL', null,
+      [[hist.length ? 'Não está na aba Bens (bem antigo do Wareline)' : 'Nenhum registro com esse número', '', '', '']], 4);
+  }
+  const ini = linha + 2;
+  escreverBloco(sh, linha, 'HISTÓRICO', ['Data', 'Hora', 'Movimento', 'Detalhe'],
+    hist.length ? hist : [['—', '', 'Nenhum movimento', '']], 4);
+  hist.forEach((r, i) => sh.getRange(ini + i, 1, 1, 4).setBackground(ACAO_COR[r[2]] || null));
+}
+
+function preencherPorSetor(ss) {
+  const sh = ss.getSheetByName(ABAS.SETOR);
+  if (!sh) return;
+  limparAbaixo(sh);
+  sh.getRange('D1').clearContent();
+  const setor = texto(sh.getRange('B1').getDisplayValue()).toLowerCase();
+  if (!setor) return;
+
+  const cab = CABECALHOS[ABAS.BENS];
+  const cols = ['Nº Patrimônio', 'Nº Patrimônio Alt.', 'Descrição', 'Grupo', 'Subgrupo', 'Marca', 'Modelo', 'Nº Série', 'Situação', 'Foto'];
+  const idx = cols.map(c => cab.indexOf(c));
+  const iLocal = cab.indexOf('Localização');
+  const iStatus = cab.indexOf('Status');
+  const bens = linhasDe(ss, ABAS.BENS)
+    .filter(r => r[iLocal].trim().toLowerCase() === setor && r[iStatus] !== 'DESINCORPORADO')
+    .map(r => idx.map(i => r[i]))
+    .sort((a, b) => a[2].localeCompare(b[2], 'pt-BR'));
+
+  sh.getRange('D1').setValue(bens.length + ' bem(ns) ativo(s)').setFontWeight('bold');
+  const vazio = [cols.map((c, i) => (i ? '' : 'Nenhum bem ativo neste setor'))];
+  escreverBloco(sh, 3, 'BENS DO SETOR', cols, bens.length ? bens : vazio, cols.length);
 }
 
 function mostrarToken() {

@@ -2,7 +2,21 @@
 import { db } from './db.js';
 import { normalizar } from './ui.js';
 
-const vazio = () => ({ bens: [], grupos: [], subgrupos: [], locais: [], situacoes: [] });
+const vazio = () => ({ bens: [], grupos: [], subgrupos: [], locais: [], situacoes: [], desincorporados: [] });
+
+/** "001733" e "1733" contam como o mesmo número. */
+export const chaveNum = (v) => String(v ?? '').trim().replace(/^0+(?=\d)/, '').toLowerCase();
+
+/** Procura o nº nos bens e nos desincorporados. Devolve { tipo: 'ativo'|'desincorporado', bem|registro } ou null. */
+export function situacaoNumero(d, numero, campo = 'patrimonio') {
+  const n = chaveNum(numero);
+  if (!n) return null;
+  const bem = d.bens.find((b) => chaveNum(b[campo]) === n);
+  if (bem) return { tipo: bem.status === 'DESINCORPORADO' ? 'desincorporado' : 'ativo', bem };
+  if (campo !== 'patrimonio') return null;
+  const reg = d.desincorporados.find((x) => chaveNum(x.patrimonio) === n);
+  return reg ? { tipo: 'desincorporado', registro: reg } : null;
+}
 
 export async function lerDados() {
   const d = { ...vazio(), ...((await db.ler('kv', 'dados')) || {}) };
@@ -56,6 +70,7 @@ export function aplicarLocal(d, op) {
     case 'desincorporar': {
       const b = bem(op.patrimonio);
       if (b) b.status = 'DESINCORPORADO';
+      (d.desincorporados ||= []).push({ patrimonio: op.patrimonio, descricao: op.descricao || b?.descricao || '', data: new Date(op.quando || Date.now()).toLocaleDateString('pt-BR') });
       break;
     }
     case 'salvarGrupo':

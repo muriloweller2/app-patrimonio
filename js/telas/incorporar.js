@@ -1,6 +1,6 @@
 import { icone } from '../icones.js';
 import { db } from '../db.js';
-import { lerDados } from '../dados.js';
+import { lerDados, situacaoNumero } from '../dados.js';
 import { registrar, enviar, situacaoDe } from '../sync.js';
 import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
 import { esc, normalizar, toast } from '../ui.js';
@@ -47,6 +47,7 @@ export async function render(el) {
           <input class="entrada" id="patrimonioAlt" inputmode="numeric" placeholder="Opcional">
           <button type="button" class="botao botao--sec botao--icone" data-ler="patrimonioAlt" aria-label="Ler código da plaqueta antiga">${icone('codigo')}</button>
         </div>
+        <div id="aviso-patrimonioAlt" class="aviso-campo" hidden></div>
       </div>
       ${seletor('grupo', 'Grupo', true, 'Escolher grupo')}
       ${seletor('subgrupo', 'Subgrupo', true, 'Escolha o grupo primeiro')}
@@ -147,16 +148,31 @@ export async function render(el) {
   };
   $('tirar-foto').onclick = () => { foto = null; mostrarFoto(); };
 
-  // Avisa se o nº já existe
+  // Avisa na hora se o nº já foi incorporado ou desincorporado (confere nos bens e nas desincorporações)
+  function avisar(id, s, alternativo) {
+    const aviso = $('aviso-' + id);
+    aviso.hidden = !s;
+    if (!s) return;
+    const des = s.tipo === 'desincorporado';
+    aviso.classList.toggle('aviso-campo--erro', des);
+    const b = s.bem || s.registro;
+    const quando = s.registro?.data || (des && s.bem?.atualizadoEm?.slice(0, 10)) || '';
+    const onde = alternativo ? 'Já usado como nº alternativo' : des ? 'Desincorporado' : 'Já incorporado';
+    aviso.innerHTML = `${icone('alerta')}<span>${onde}${quando ? ` em ${esc(quando)}` : ''}: <b>${esc(b.descricao || '')}</b>`
+      + `${s.bem?.patrimonio && alternativo ? ` (nº ${esc(s.bem.patrimonio)})` : ''}${s.bem?.localizacao ? ` · ${esc(s.bem.localizacao)}` : ''}</span>`;
+  }
   async function conferirPatrimonio() {
-    const n = valorTexto('patrimonio');
-    const aviso = $('aviso-patrimonio');
-    const b = n && (await lerDados()).bens.find((x) => normalizar(x.patrimonio) === normalizar(n));
-    aviso.hidden = !b;
-    if (b) aviso.innerHTML = `${icone('alerta')} Já cadastrado${b.status === 'DESINCORPORADO' ? ' (desincorporado)' : ''}: <b>${esc(b.descricao)}</b>${b.localizacao ? ` · ${esc(b.localizacao)}` : ''}`;
-    return !b;
+    const s = situacaoNumero(await lerDados(), valorTexto('patrimonio'));
+    avisar('patrimonio', s);
+    return !s;
+  }
+  async function conferirAlternativo() {
+    const d = await lerDados();
+    const n = valorTexto('patrimonioAlt');
+    avisar('patrimonioAlt', situacaoNumero(d, n, 'patrimonioAlt'), true);
   }
   $('patrimonio').addEventListener('input', () => { marcarOk('patrimonio'); conferirPatrimonio(); });
+  $('patrimonioAlt').addEventListener('input', conferirAlternativo);
   $('descricao').addEventListener('input', () => marcarOk('descricao'));
 
   $('form').onsubmit = async (e) => {
@@ -175,7 +191,10 @@ export async function render(el) {
       el.querySelector(`[data-campo="${faltando[0]}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
       return toast('Preencha os campos obrigatórios', 'erro');
     }
-    if (!(await conferirPatrimonio())) return toast('Esse nº de patrimônio já está cadastrado', 'erro');
+    if (!(await conferirPatrimonio())) {
+      $('patrimonio').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return toast('Esse nº de patrimônio já existe. Veja o aviso abaixo do campo.', 'erro');
+    }
 
     const bem = {
       patrimonio: valorTexto('patrimonio'),
@@ -203,6 +222,7 @@ export async function render(el) {
     Object.assign(escolha, { grupo: null, subgrupo: null, situacao: null });
     atualizarSeletores();
     $('aviso-patrimonio').hidden = true;
+    $('aviso-patrimonioAlt').hidden = true;
     foto = null; mostrarFoto();
     $('salvar').disabled = false;
     $('patrimonio').focus();

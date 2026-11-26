@@ -235,7 +235,10 @@ textarea.entrada { resize: vertical; min-height: 70px; }
   padding: 10px 12px; border-radius: var(--raio-p); font-size: 14px;
   background: color-mix(in srgb, var(--cor-aviso) 16%, var(--superficie));
 }
-.aviso-campo .ico { width: 18px; height: 18px; color: var(--cor-aviso); }
+.aviso-campo .ico { width: 18px; height: 18px; flex: none; color: var(--cor-aviso); }
+.aviso-campo[hidden] { display: none; }
+.aviso-campo--erro { background: color-mix(in srgb, var(--cor-desincorporar) 16%, var(--superficie)); }
+.aviso-campo--erro .ico { color: var(--cor-desincorporar); }
 
 .segmentado { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; border-radius: var(--raio-p); background: var(--superficie-2); }
 .segmentado input { position: absolute; opacity: 0; pointer-events: none; }
