@@ -1,3 +1,4 @@
+const VERSAO_SCRIPT = '2026-11-26';
 /**
  * App Patrimônio — backend (Google Apps Script vinculado à planilha)
  *
@@ -99,7 +100,7 @@ function executarSeguro(op) {
 
 function executar(op) {
   switch (op.action) {
-    case 'ping': return { msg: 'Conectado', planilha: planilha().getName() };
+    case 'ping': return { msg: 'Conectado', planilha: planilha().getName(), versao: VERSAO_SCRIPT };
     case 'dados': return lerDados();
     case 'incorporar': return incorporar(op);
     case 'alterar': return alterar(op);

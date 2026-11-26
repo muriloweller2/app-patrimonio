@@ -68,7 +68,7 @@ export function render(el) {
     try {
       const r = await chamar('ping', {}, lerCampos());
       res.className = 'resultado ' + (r.ok ? 'ok' : 'erro');
-      res.textContent = r.ok ? `Conectado à planilha "${r.planilha}".` : `Erro: ${r.erro}`;
+      res.textContent = r.ok ? `Conectado à planilha "${r.planilha}". ` + (r.versao ? `Script atualizado (${r.versao}).` : "⚠ Script ANTIGO: atualize o Apps Script (Nova versão).") : `Erro: ${r.erro}`;
     } catch (err) {
       res.className = 'resultado erro';
       res.textContent = err.message;

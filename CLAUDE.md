@@ -85,7 +85,7 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
 - Etapa 3 (2026-11-26): fila offline (`js/db.js`, `js/sync.js`, `js/dados.js` = cache local + `aplicarLocal`),
   janelas `js/componentes.js` (escolher com busca / formulario), `js/cadastros.js`, telas incorporar/cadastros/pendencias.
   Decisões: **Situação, Grupo, Subgrupo e Localização são listas fixas cadastradas SÓ na aba Cadastros** (na Incorporar apenas se escolhe).
-  Grupo/Subgrupo: **nome obrigatório, código opcional**; identificação pelo nome; subgrupo liga ao grupo pelo nome (renomear grupo propaga).
+  Grupo/Subgrupo: **só nome** (campo código tirado do app em 2026-11-26 a pedido do usuário); identificação pelo nome; subgrupo liga ao grupo pelo nome (renomear grupo propaga).
   Abas: Grupos [Nome, Código], Subgrupos [Grupo, Nome, Código], Situações [Nome].
   Obrigatórios na incorporação: nº patrimônio, descrição, grupo, subgrupo, localização. Após salvar mantém só a localização.
   Fila: envia em lote ao abrir, ao voltar internet/app e a cada 1 min se houver pendente; erros da planilha ficam em #/pendencias.

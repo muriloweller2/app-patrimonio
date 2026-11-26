@@ -1,5 +1,5 @@
 // Grupos, subgrupos, localizações e situações: escolher, criar, editar, excluir.
-// Identificação sempre pelo NOME (código é opcional). Subgrupo fica ligado ao grupo pelo nome do grupo.
+// Identificação sempre pelo NOME (sem código). Subgrupo fica ligado ao grupo pelo nome do grupo.
 import { escolher, formulario } from './componentes.js';
 import { registrar, enviar } from './sync.js';
 import { lerDados } from './dados.js';
@@ -16,10 +16,8 @@ async function gravar(action, dados, msg) {
   enviar();
 }
 
-const camposCodNome = (x = {}) => [
-  { nome: 'nome', rotulo: 'Nome', valor: x.nome },
-  { nome: 'codigo', rotulo: 'Código (opcional)', valor: x.codigo, modo: 'numeric', opcional: true },
-];
+// Só o nome: o código foi tirado do app a pedido do usuário (cadastro livre)
+const camposCodNome = (x = {}) => [{ nome: 'nome', rotulo: 'Nome', valor: x.nome }];
 
 // ── Grupos ──
 export async function novoGrupo() {
@@ -60,7 +58,7 @@ export async function novoSubgrupo(grupo) {
   if (d.subgrupos.some((s) => mesmo(s.grupo, grupo.nome) && mesmo(s.nome, v.nome))) {
     return toast('Esse subgrupo já existe neste grupo', 'erro'), null;
   }
-  const sub = { grupo: grupo.nome, codigo: v.codigo, nome: v.nome };
+  const sub = { grupo: grupo.nome, nome: v.nome };
   await gravar('salvarSubgrupo', sub, 'Subgrupo cadastrado');
   return sub;
 }
