@@ -1,6 +1,6 @@
 // Service worker: deixa o app abrir sem internet.
 // Estratégia: tenta a rede (versão mais nova), e se falhar ou demorar usa o cache.
-const CACHE = 'patrimonio-v4';
+const CACHE = 'patrimonio-v5';
 const ARQUIVOS = [
   './',
   'index.html',
@@ -47,7 +47,7 @@ self.addEventListener('fetch', (e) => {
     const cache = await caches.open(CACHE);
     try {
       const resp = await Promise.race([
-        fetch(req),
+        fetch(req, { cache: 'no-cache' }), // sempre confere se há versão nova (GitHub guarda 10 min)
         new Promise((_, rej) => setTimeout(() => rej(new Error('lento')), 3000)),
       ]);
       if (resp.ok) cache.put(req, resp.clone());
