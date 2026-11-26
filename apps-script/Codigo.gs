@@ -14,6 +14,7 @@ const ABAS = {
   GRUPOS: 'Grupos',
   SUBGRUPOS: 'Subgrupos',
   LOCAIS: 'Localizações',
+  SITUACOES: 'Situações',
 };
 
 // Campos do bem, na ordem do Wareline: [chave usada pelo app, cabeçalho na planilha]
@@ -42,9 +43,10 @@ const CABECALHOS = {
   [ABAS.INC]: ['Data', 'Hora', ...ROTULOS, LANCADO, 'ID'],
   [ABAS.ALT]: ['Data', 'Hora', 'Nº Patrimônio', 'Descrição', 'Campo', 'Valor anterior', 'Novo valor', LANCADO, 'ID'],
   [ABAS.DES]: ['Data', 'Hora', 'Nº Patrimônio', 'Descrição', LANCADO, 'ID'],
-  [ABAS.GRUPOS]: ['Código', 'Nome'],
-  [ABAS.SUBGRUPOS]: ['Cód. Grupo', 'Código', 'Nome'],
+  [ABAS.GRUPOS]: ['Nome', 'Código'],
+  [ABAS.SUBGRUPOS]: ['Grupo', 'Nome', 'Código'],
   [ABAS.LOCAIS]: ['Nome'],
+  [ABAS.SITUACOES]: ['Nome'],
 };
 
 // ───────────────────────── Entrada HTTP ─────────────────────────
@@ -98,12 +100,14 @@ function executar(op) {
     case 'incorporar': return incorporar(op);
     case 'alterar': return alterar(op);
     case 'desincorporar': return desincorporar(op);
-    case 'salvarGrupo': return salvarAux(ABAS.GRUPOS, 1, [op.codigo, op.nome], op.anterior);
-    case 'excluirGrupo': return excluirAux(ABAS.GRUPOS, [op.codigo]);
-    case 'salvarSubgrupo': return salvarAux(ABAS.SUBGRUPOS, 2, [op.grupoCod, op.codigo, op.nome], op.anterior);
-    case 'excluirSubgrupo': return excluirAux(ABAS.SUBGRUPOS, [op.grupoCod, op.codigo]);
+    case 'salvarGrupo': return salvarGrupo(op);
+    case 'excluirGrupo': return excluirAux(ABAS.GRUPOS, [op.nome]);
+    case 'salvarSubgrupo': return salvarAux(ABAS.SUBGRUPOS, 2, [op.grupo, op.nome, op.codigo], op.anterior);
+    case 'excluirSubgrupo': return excluirAux(ABAS.SUBGRUPOS, [op.grupo, op.nome]);
     case 'salvarLocal': return salvarAux(ABAS.LOCAIS, 1, [op.nome], op.anterior);
     case 'excluirLocal': return excluirAux(ABAS.LOCAIS, [op.nome]);
+    case 'salvarSituacao': return salvarAux(ABAS.SITUACOES, 1, [op.nome], op.anterior);
+    case 'excluirSituacao': return excluirAux(ABAS.SITUACOES, [op.nome]);
     default: throw new Error('Ação desconhecida: ' + op.action);
   }
 }
@@ -192,22 +196,23 @@ function lerDados() {
       o.atualizadoEm = r[cabBens.indexOf('Atualizado em')];
       return o;
     }),
-    grupos: linhas(ABAS.GRUPOS).map(r => ({ codigo: r[0], nome: r[1] })),
-    subgrupos: linhas(ABAS.SUBGRUPOS).map(r => ({ grupoCod: r[0], codigo: r[1], nome: r[2] })),
+    grupos: linhas(ABAS.GRUPOS).map(r => ({ nome: r[0], codigo: r[1] })),
+    subgrupos: linhas(ABAS.SUBGRUPOS).map(r => ({ grupo: r[0], nome: r[1], codigo: r[2] })),
     locais: linhas(ABAS.LOCAIS).map(r => r[0]),
+    situacoes: linhas(ABAS.SITUACOES).map(r => r[0]),
   };
 }
 
 // ───────────────────────── Cadastros auxiliares ─────────────────────────
 
-/** Insere ou atualiza uma linha identificada pelas primeiras `nChave` colunas. */
+/** Insere ou atualiza uma linha identificada pelas primeiras `nChave` colunas (obrigatórias; as demais são opcionais). */
 function salvarAux(nome, nChave, valores, anterior) {
   valores = valores.map(texto);
-  if (valores.some(v => !v)) throw new Error('Preencha todos os campos.');
+  if (valores.slice(0, nChave).some(v => !v)) throw new Error('Preencha o nome.');
   const chaveNova = valores.slice(0, nChave);
   const linhaAntiga = anterior ? acharLinhaAux(nome, anterior) : 0;
   const linhaExistente = acharLinhaAux(nome, chaveNova);
-  if (linhaExistente && linhaExistente !== linhaAntiga && anterior) throw new Error('Já existe um cadastro com esse código/nome.');
+  if (linhaExistente && linhaExistente !== linhaAntiga && anterior) throw new Error('Já existe um cadastro com esse nome.');
 
   const sh = aba(nome);
   const linha = linhaAntiga || linhaExistente;
@@ -341,7 +346,7 @@ function configurarPlanilha() {
   configurarPorDia(ss);
 
   // Ordem das abas
-  [ABAS.DIA, ABAS.BENS, ABAS.INC, ABAS.ALT, ABAS.DES, ABAS.GRUPOS, ABAS.SUBGRUPOS, ABAS.LOCAIS]
+  [ABAS.DIA, ABAS.BENS, ABAS.INC, ABAS.ALT, ABAS.DES, ABAS.GRUPOS, ABAS.SUBGRUPOS, ABAS.LOCAIS, ABAS.SITUACOES]
     .forEach((nome, i) => { ss.setActiveSheet(ss.getSheetByName(nome)); ss.moveActiveSheet(i + 1); });
 
   // Remove a aba padrão vazia
@@ -391,4 +396,18 @@ function configurarPorDia(ss) {
 
 function mostrarToken() {
   SpreadsheetApp.getUi().alert('Token do app:\n' + PropertiesService.getScriptProperties().getProperty('TOKEN'));
+}
+
+/** Salva o grupo; se foi renomeado, atualiza o nome do grupo nos subgrupos dele. */
+function salvarGrupo(op) {
+  const r = salvarAux(ABAS.GRUPOS, 1, [op.nome, op.codigo], op.anterior);
+  const antigo = op.anterior && texto(op.anterior[0]);
+  if (antigo && antigo.toLowerCase() !== texto(op.nome).toLowerCase()) {
+    const sh = aba(ABAS.SUBGRUPOS);
+    if (sh.getLastRow() > 1) {
+      const col = sh.getRange(2, 1, sh.getLastRow() - 1, 1);
+      col.setValues(col.getDisplayValues().map(([g]) => [g.trim().toLowerCase() === antigo.toLowerCase() ? texto(op.nome) : g]));
+    }
+  }
+  return r;
 }

@@ -75,4 +75,13 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
 - Etapa 2 (base do app): feita em `index.html`, `css/`, `js/` (app.js = rotas por hash; telas em `js/telas/`), `sw.js`, `manifest.webmanifest`, `icons/`.
   Tela de Ajustes (URL + token + Testar) pronta; demais telas são "em breve". Visual em `DESIGN.md`.
   **Ao adicionar arquivo JS/CSS, incluir na lista do `sw.js` e subir o número de `CACHE`.**
-  Pendente: publicar no GitHub Pages; valores da lista "Situação".
+  Publicado: repo github.com/muriloweller2/app-patrimonio (público, branch main, usuário usa GitHub Desktop)
+  → https://muriloweller2.github.io/app-patrimonio/  Usuário publica com GitHub Desktop (commit + push).
+- Etapa 3 (2026-11-26): fila offline (`js/db.js`, `js/sync.js`, `js/dados.js` = cache local + `aplicarLocal`),
+  janelas `js/componentes.js` (escolher com busca / formulario), `js/cadastros.js`, telas incorporar/cadastros/pendencias.
+  Decisões: **Situação, Grupo, Subgrupo e Localização são listas fixas cadastradas SÓ na aba Cadastros** (na Incorporar apenas se escolhe).
+  Grupo/Subgrupo: **nome obrigatório, código opcional**; identificação pelo nome; subgrupo liga ao grupo pelo nome (renomear grupo propaga).
+  Abas: Grupos [Nome, Código], Subgrupos [Grupo, Nome, Código], Situações [Nome].
+  Obrigatórios na incorporação: nº patrimônio, descrição, grupo, subgrupo, localização. Após salvar mantém só a localização.
+  Fila: envia em lote ao abrir, ao voltar internet/app e a cada 1 min se houver pendente; erros da planilha ficam em #/pendencias.
+  Só verificado com node (sintaxe/imports) — **aguardando teste real do usuário**.

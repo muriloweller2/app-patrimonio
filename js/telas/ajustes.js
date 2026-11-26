@@ -1,6 +1,7 @@
 import { icone } from '../icones.js';
 import { lerConfig, salvarConfig } from '../config.js';
 import { chamar } from '../api.js';
+import { enviar } from '../sync.js';
 import { esc, toast } from '../ui.js';
 
 export const titulo = 'Ajustes';
@@ -51,7 +52,9 @@ export function render(el) {
       toast('A URL deve começar com https://script.google.com e terminar em /exec', 'erro');
       return;
     }
-    salvarConfig({ ...lerConfig(), ...novo }) ? toast('Salvo!', 'ok') : toast('Não foi possível salvar neste navegador', 'erro');
+    if (!salvarConfig({ ...lerConfig(), ...novo })) return toast('Não foi possível salvar neste navegador', 'erro');
+    toast('Salvo!', 'ok');
+    enviar(); // baixa grupos, subgrupos, localizações e bens da planilha
   };
 
   $('testar').onclick = async () => {
