@@ -3,6 +3,12 @@
 import { icone } from './icones.js';
 import { esc } from './ui.js';
 
+// Plaquetas do hospital (nova prata e antiga verde) têm sempre 6 dígitos, ex.: 001733.
+// Leituras de outro tamanho são pedaços do código mal lidos e são ignoradas.
+const VALIDO = /^\d{6}$/;
+// Quantas leituras iguais seguidas são exigidas antes de aceitar (evita 001733 virar 001713).
+const CONFIRMACOES = 4;
+
 const PREFERIDOS = ['itf', 'code_39', 'code_128', 'codabar', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e'];
 
 export const leitorDisponivel = () => 'BarcodeDetector' in window && !!navigator.mediaDevices?.getUserMedia;
@@ -24,7 +30,7 @@ export async function lerCodigo(titulo = 'Ler código') {
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     });
   } catch (e) {
@@ -49,6 +55,10 @@ export async function lerCodigo(titulo = 'Ler código') {
   video.srcObject = stream;
 
   const trilha = stream.getVideoTracks()[0];
+  // Foco automático contínuo, se a câmera permitir (código nítido = menos erro)
+  if (trilha.getCapabilities?.().focusMode?.includes('continuous')) {
+    trilha.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+  }
   const btnLuz = dlg.querySelector('[data-luz]');
   let luz = false;
   if (trilha.getCapabilities?.().torch) {
@@ -78,12 +88,12 @@ export async function lerCodigo(titulo = 'Ler código') {
       if (video.readyState >= 2) {
         try {
           const achados = await det.detect(video);
-          const valor = achados.map((c) => String(c.rawValue || '').trim()).find(Boolean);
-          // Exige a mesma leitura 2 vezes seguidas para evitar número errado
+          const valor = achados.map((c) => String(c.rawValue || '').trim()).find((v) => VALIDO.test(v));
+          // Exige a mesma leitura várias vezes seguidas; qualquer leitura diferente recomeça a contagem
           if (valor) {
             repeticoes = valor === anterior ? repeticoes + 1 : 1;
             anterior = valor;
-            if (repeticoes >= 2) {
+            if (repeticoes >= CONFIRMACOES) {
               navigator.vibrate?.(120);
               dlg.classList.add('leitor--ok');
               setTimeout(() => terminar(valor), 250);

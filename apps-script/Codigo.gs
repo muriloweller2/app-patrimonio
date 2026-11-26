@@ -129,7 +129,7 @@ function incorporar(op) {
   const m = momento(op.quando);
   const valores = CAMPOS.map(c => b[c[0]] || '');
 
-  aba(ABAS.BENS).appendRow([...valores, 'ATIVO', m.dataHora, '']);
+  aba(ABAS.BENS).appendRow([...valores, 'ATIVO', m.dataHora, ''].map(fixo));
   registrar(ABAS.INC, [m.data, m.hora, ...valores, false, op.id || '']);
   return { msg: 'Incorporado', foto: b.foto || '' };
 }
@@ -153,7 +153,7 @@ function alterar(op) {
     const antes = String(atual[i] || '');
     const depois = String(novo[chave] || '');
     if (antes === depois) return;
-    sh.getRange(linha, i + 1).setValue(depois);
+    sh.getRange(linha, i + 1).setValue(fixo(depois));
     registrar(ABAS.ALT, [m.data, m.hora, novo.patrimonio, descricao, rotulo, antes, depois, false, op.id || '']);
     mudancas++;
   });
@@ -248,8 +248,8 @@ function salvarAux(nome, nChave, valores, anterior) {
 
   const sh = aba(nome);
   const linha = linhaAntiga || linhaExistente;
-  if (linha) sh.getRange(linha, 1, 1, valores.length).setValues([valores]);
-  else sh.appendRow(valores);
+  if (linha) sh.getRange(linha, 1, 1, valores.length).setValues([valores.map(fixo)]);
+  else sh.appendRow(valores.map(fixo));
   sh.getRange(2, 1, Math.max(sh.getLastRow() - 1, 1), sh.getLastColumn()).sort(Array.from({ length: nChave }, (_, i) => i + 1));
   return { msg: 'Salvo' };
 }
@@ -281,6 +281,11 @@ function aba(nome) {
   const sh = planilha().getSheetByName(nome);
   if (!sh) throw new Error('Aba "' + nome + '" não existe. Rode configurarPlanilha.');
   return sh;
+}
+
+/** Grava texto exatamente como digitado: o apóstrofo (invisível) impede o Sheets de tirar zeros (001733 → 1733) ou virar data. */
+function fixo(v) {
+  return typeof v === 'string' && v !== '' ? "'" + v : v;
 }
 
 function texto(v) {
@@ -316,7 +321,7 @@ function jaProcessado(nome, id) {
 /** Acrescenta um registro (Incorporações/Alterações/Desincorporações) com data formatada e checkbox. */
 function registrar(nome, linha) {
   const sh = aba(nome);
-  sh.appendRow(linha);
+  sh.appendRow(linha.map(fixo));
   const r = sh.getLastRow();
   sh.getRange(r, 1).setNumberFormat('dd/mm/yyyy');
   sh.getRange(r, CABECALHOS[nome].indexOf(LANCADO) + 1).insertCheckboxes();
