@@ -3,7 +3,7 @@ import { db } from '../db.js';
 import { lerDados, situacaoNumero } from '../dados.js';
 import { registrar, enviar, situacaoDe } from '../sync.js';
 import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
-import { esc, normalizar, toast } from '../ui.js';
+import { esc, normalizar, toast, botoesLimpar } from '../ui.js';
 import { lerCodigo } from '../leitor.js';
 import { prepararFoto } from '../foto.js';
 
@@ -85,6 +85,7 @@ export async function render(el) {
   `;
 
   const $ = (id) => el.querySelector('#' + id);
+  botoesLimpar(el, icone);
   const valorTexto = (id) => $(id).value.trim();
 
   function mostrar(id, txt) {

@@ -22,3 +22,24 @@ export const dataHora = (iso) =>
   new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 export const ehHoje = (iso) => new Date(iso).toDateString() === new Date().toDateString();
+
+/** Coloca um "x" dentro de cada campo de texto da área: aparece quando há algo digitado e apaga ao tocar. */
+export function botoesLimpar(area, icone) {
+  area.querySelectorAll('input.entrada').forEach((inp) => {
+    const caixa = document.createElement('span');
+    caixa.className = 'limpavel';
+    inp.replaceWith(caixa);
+    caixa.appendChild(inp);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'limpar';
+    btn.setAttribute('aria-label', 'Apagar');
+    btn.innerHTML = icone('fechar');
+    caixa.appendChild(btn);
+    const mostrar = () => { btn.hidden = !inp.value; };
+    btn.onclick = () => { inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true })); inp.focus(); };
+    inp.addEventListener('input', mostrar);
+    inp.form?.addEventListener('reset', () => setTimeout(mostrar));
+    mostrar();
+  });
+}
