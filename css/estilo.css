@@ -321,7 +321,7 @@ dialog.leitor::backdrop { background: #000; }
 .leitor video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .leitor__mira { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 .leitor__mira span {
-  width: min(88vw, 520px); height: min(56vw, 330px); border-radius: 14px;
+  width: min(62vw, 340px); height: min(40vw, 220px); border-radius: 14px;
   border: 3px solid rgb(255 255 255 / 90%); box-shadow: 0 0 0 100vmax rgb(0 0 0 / 45%);
   transition: border-color .15s, transform .15s;
 }
@@ -360,3 +360,8 @@ dialog.leitor::backdrop { background: #000; }
 .limpar svg { width: 18px; height: 18px; }
 .limpar:active { background: var(--superficie); }
 .limpar[hidden] { display: none; }
+.limpavel--area .limpar { top: 6px; transform: none; }
+.limpavel--seletor .limpar { right: 42px; }
+.limpavel--seletor .seletor__valor { margin-right: 44px; }
+.leitor__topo strong { flex: 1; }
+input[type=search]::-webkit-search-cancel-button { display: none; }

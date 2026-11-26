@@ -23,19 +23,25 @@ export const dataHora = (iso) =>
 
 export const ehHoje = (iso) => new Date(iso).toDateString() === new Date().toDateString();
 
+/** Envolve o elemento numa caixa com um botão "x" por dentro; devolve o botão. */
+export function botaoX(elem, icone, classe = '') {
+  const caixa = document.createElement('span');
+  caixa.className = ('limpavel ' + classe).trim();
+  elem.replaceWith(caixa);
+  caixa.appendChild(elem);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'limpar';
+  btn.setAttribute('aria-label', 'Apagar');
+  btn.innerHTML = icone('fechar');
+  caixa.appendChild(btn);
+  return btn;
+}
+
 /** Coloca um "x" dentro de cada campo de texto da área: aparece quando há algo digitado e apaga ao tocar. */
 export function botoesLimpar(area, icone) {
-  area.querySelectorAll('input.entrada').forEach((inp) => {
-    const caixa = document.createElement('span');
-    caixa.className = 'limpavel';
-    inp.replaceWith(caixa);
-    caixa.appendChild(inp);
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'limpar';
-    btn.setAttribute('aria-label', 'Apagar');
-    btn.innerHTML = icone('fechar');
-    caixa.appendChild(btn);
+  area.querySelectorAll('input.entrada, textarea.entrada').forEach((inp) => {
+    const btn = botaoX(inp, icone, inp.tagName === 'TEXTAREA' ? 'limpavel--area' : '');
     const mostrar = () => { btn.hidden = !inp.value; };
     btn.onclick = () => { inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true })); inp.focus(); };
     inp.addEventListener('input', mostrar);

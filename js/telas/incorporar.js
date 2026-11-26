@@ -3,7 +3,7 @@ import { db } from '../db.js';
 import { lerDados, situacaoNumero } from '../dados.js';
 import { registrar, enviar, situacaoDe } from '../sync.js';
 import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
-import { esc, normalizar, toast, botoesLimpar } from '../ui.js';
+import { esc, normalizar, toast, botoesLimpar, botaoX } from '../ui.js';
 import { lerCodigo } from '../leitor.js';
 import { prepararFoto } from '../foto.js';
 
@@ -86,12 +86,23 @@ export async function render(el) {
 
   const $ = (id) => el.querySelector('#' + id);
   botoesLimpar(el, icone);
+  // "x" nos campos de escolher: limpa a escolha (limpar o grupo limpa também o subgrupo)
+  const xSel = {};
+  ['grupo', 'subgrupo', 'local', 'situacao'].forEach((id) => {
+    xSel[id] = botaoX($(id), icone, 'limpavel--seletor');
+    xSel[id].onclick = () => {
+      escolha[id] = null;
+      if (id === 'grupo') escolha.subgrupo = null;
+      atualizarSeletores();
+    };
+  });
   const valorTexto = (id) => $(id).value.trim();
 
   function mostrar(id, txt) {
     const v = $(id).querySelector('.seletor__valor');
     v.textContent = txt || '';
     $(id).classList.toggle('vazio', !txt);
+    xSel[id].hidden = !txt;
   }
   function atualizarSeletores() {
     mostrar('grupo', escolha.grupo && rotuloCod(escolha.grupo));

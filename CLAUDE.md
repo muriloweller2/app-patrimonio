@@ -97,7 +97,7 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
   (`CONFIRMACOES`), câmera 1920x1080 e foco contínuo. Zeros sumiam na planilha → Codigo.gs grava todo texto com apóstrofo (`fixo`).
   Ajuste 2 (2026-11-26, lento/foco/distância): zoom inicial 2x + botão 1x/2x/3x, toque para focar (pointsOfInterest),
   recorte central no canvas, leitura a cada quadro (requestAnimationFrame), aceita 3 iguais sem divergência nas últimas 6,
-  mira maior (plaqueta inteira). Ajuste 3: rodízio de regiões (imagem toda, recorte 60% e 40% em resolução cheia), câmera 2560x1440 → lê com a plaqueta inteira na tela. OCR do número impresso: proposto (Tesseract.js local, só como plano B) — **aguardando decisão**.
+  mira maior (plaqueta inteira). Ajuste 3: rodízio de regiões (imagem toda, recorte 60% e 40% em resolução cheia), câmera 2560x1440. Ajuste 4: foto automática em resolução máxima (ImageCapture.takePhoto) a cada 1,2 s analisada em recortes (2 recortes iguais = aceita), botão L1/L2 troca lente traseira (macro), mira menor. OCR do número impresso: proposto (Tesseract.js local, só como plano B) — **aguardando decisão**.
 - Etapa 5 (2026-11-26): `js/foto.js` diminui a foto (1280px, JPEG 0.72) → vai na op `incorporar` como `foto {base64,mime}`
   e fica na fila offline. `sync.js` envia em pacotes de até 4 fotos; timeout da API 45 s. Apps Script não mudou
   (salvarFoto já existia: pasta "Patrimônio - Fotos" no Drive, link na coluna Foto). **Aguardando teste real.**

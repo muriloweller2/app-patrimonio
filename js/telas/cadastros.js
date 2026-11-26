@@ -1,7 +1,7 @@
 import { icone } from '../icones.js';
 import { lerDados } from '../dados.js';
 import { escolherGrupo, novoGrupo, editarGrupo, novoSubgrupo, editarSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
-import { esc, normalizar, toast } from '../ui.js';
+import { esc, normalizar, toast, botoesLimpar } from '../ui.js';
 
 export const titulo = 'Cadastros';
 
@@ -46,6 +46,7 @@ export async function render(el) {
     <ul class="lista" id="lista"></ul>
   `;
 
+  botoesLimpar(el, icone);
   const lista = el.querySelector('#lista');
   const busca = el.querySelector('#busca');
 

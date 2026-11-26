@@ -1,12 +1,13 @@
 // Janelas reutilizáveis: seletor com busca e formulário curto
 import { icone } from './icones.js';
-import { esc, normalizar } from './ui.js';
+import { esc, normalizar, botoesLimpar } from './ui.js';
 
 function abrirFolha(html, classe = '') {
   const dlg = document.createElement('dialog');
   dlg.className = `folha ${classe}`;
   dlg.innerHTML = html;
   document.body.append(dlg);
+  botoesLimpar(dlg, icone);
   dlg.querySelector('[data-fechar]')?.addEventListener('click', () => dlg.close());
   dlg.addEventListener('click', (e) => e.target === dlg && dlg.close()); // toque fora fecha
   return dlg;

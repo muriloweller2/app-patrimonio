@@ -2,7 +2,7 @@ import { icone } from '../icones.js';
 import { lerConfig, salvarConfig } from '../config.js';
 import { chamar } from '../api.js';
 import { enviar } from '../sync.js';
-import { esc, toast } from '../ui.js';
+import { esc, toast, botoesLimpar } from '../ui.js';
 
 export const titulo = 'Ajustes';
 
@@ -38,6 +38,7 @@ export function render(el) {
   `;
 
   const $ = (id) => el.querySelector('#' + id);
+  botoesLimpar(el, icone);
   const lerCampos = () => ({ url: $('url').value.trim(), token: $('token').value.trim() });
 
   $('ver').onclick = () => {
