@@ -85,3 +85,6 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
   Obrigatórios na incorporação: nº patrimônio, descrição, grupo, subgrupo, localização. Após salvar mantém só a localização.
   Fila: envia em lote ao abrir, ao voltar internet/app e a cada 1 min se houver pendente; erros da planilha ficam em #/pendencias.
   Só verificado com node (sintaxe/imports) — **aguardando teste real do usuário**.
+- Etapa 4 (2026-11-26): `js/leitor.js` = leitor ao vivo (BarcodeDetector, sem tirar foto, exige 2 leituras iguais, vibra, lanterna se houver).
+  Botão de leitura no Nº de Patrimônio (plaqueta nova prata, ISC) e no Nº alternativo (plaqueta antiga verde "Santa Casa", não pode ser retirada).
+  Ambas com 6 dígitos e zeros à esquerda (ex.: 001733, 000909). Sem fallback ZXing por enquanto (iPhone não lê). **Aguardando teste real.**

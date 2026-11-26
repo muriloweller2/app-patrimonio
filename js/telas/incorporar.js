@@ -4,6 +4,7 @@ import { lerDados } from '../dados.js';
 import { registrar, enviar, situacaoDe } from '../sync.js';
 import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
 import { esc, normalizar, toast } from '../ui.js';
+import { lerCodigo } from '../leitor.js';
 
 export const titulo = 'Incorporar';
 
@@ -35,11 +36,17 @@ export async function render(el) {
         <label for="patrimonio">Nº de Patrimônio <span class="obrig">*</span></label>
         <div class="com-botao">
           <input class="entrada entrada--grande" id="patrimonio" inputmode="numeric" enterkeyhint="next">
-          <button type="button" class="botao botao--sec botao--icone" id="ler-codigo" aria-label="Ler código de barras">${icone('camera')}</button>
+          <button type="button" class="botao botao--sec botao--icone" data-ler="patrimonio" aria-label="Ler código de barras">${icone('codigo')}</button>
         </div>
         <div id="aviso-patrimonio" class="aviso-campo" hidden></div>
       </div>
-      ${texto('patrimonioAlt', 'Nº de Patrimônio alternativo', { dica: 'Opcional' })}
+      <div class="campo" data-campo="patrimonioAlt">
+        <label for="patrimonioAlt">Nº de Patrimônio alternativo <small class="dica">plaqueta antiga verde</small></label>
+        <div class="com-botao">
+          <input class="entrada" id="patrimonioAlt" inputmode="numeric" placeholder="Opcional">
+          <button type="button" class="botao botao--sec botao--icone" data-ler="patrimonioAlt" aria-label="Ler código da plaqueta antiga">${icone('codigo')}</button>
+        </div>
+      </div>
       ${seletor('grupo', 'Grupo', true, 'Escolher grupo')}
       ${seletor('subgrupo', 'Subgrupo', true, 'Escolha o grupo primeiro')}
       ${texto('descricao', 'Descrição do bem', { obrigatorio: true })}
@@ -106,7 +113,18 @@ export async function render(el) {
     const s = await situacoes.escolher();
     if (s) { escolha.situacao = s.nome; atualizarSeletores(); }
   };
-  $('ler-codigo').onclick = () => toast('Leitura de código de barras chega na etapa 4');
+  el.querySelectorAll('[data-ler]').forEach((b) => {
+    b.onclick = async () => {
+      const id = b.dataset.ler;
+      try {
+        const n = await lerCodigo(id === 'patrimonio' ? 'Nº de Patrimônio' : 'Nº alternativo (plaqueta antiga)');
+        if (!n) return;
+        $(id).value = n;
+        $(id).dispatchEvent(new Event('input'));
+        toast(`Lido: ${n}`, 'ok');
+      } catch (e) { toast(e.message, 'erro'); }
+    };
+  });
   $('foto').onclick = () => toast('Fotos chegam na etapa 5');
 
   // Avisa se o nº já existe
