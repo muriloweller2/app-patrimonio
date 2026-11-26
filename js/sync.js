@@ -30,7 +30,8 @@ async function baixarDados() {
   const r = await chamar('dados');
   if (!r.ok) return false;
   const { ok, id, ...dados } = r;
-  const resto = (await db.todos('fila')).sort((a, b) => a.criado - b.criado);
+  // Só o que ainda espera envio; o que a planilha recusou não conta como cadastrado
+  const resto = (await db.todos('fila')).filter((o) => o.estado !== 'erro').sort((a, b) => a.criado - b.criado);
   resto.forEach((op) => aplicarLocal(dados, op));
   await gravarDados(dados);
   return true;
