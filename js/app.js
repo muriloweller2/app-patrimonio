@@ -6,11 +6,13 @@ import * as ajustes from './telas/ajustes.js';
 import * as incorporar from './telas/incorporar.js';
 import * as cadastros from './telas/cadastros.js';
 import * as pendencias from './telas/pendencias.js';
+import * as pesquisa from './telas/pesquisa.js';
 import { emBreve } from './telas/em-breve.js';
 
 const ROTAS = {
   '': inicio,
   incorporar,
+  pesquisa,
   bens: emBreve('Bens', 'etapa 6'),
   desincorporar: emBreve('Desincorporar', 'etapa 7'),
   cadastros,
@@ -20,7 +22,7 @@ const ROTAS = {
 
 const ABAS = [
   ['', 'inicio', 'Início'],
-  ['bens', 'lista', 'Bens'],
+  ['pesquisa', 'busca', 'Pesquisa'],
   ['cadastros', 'camadas', 'Cadastros'],
   ['ajustes', 'ajustes', 'Ajustes'],
 ];

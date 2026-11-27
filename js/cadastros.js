@@ -1,7 +1,7 @@
 // Grupos, subgrupos, localizações e situações: escolher, criar, editar, excluir.
 // Identificação sempre pelo NOME (sem código). Subgrupo fica ligado ao grupo pelo nome do grupo.
 import { escolher, formulario } from './componentes.js';
-import { registrar, enviar } from './sync.js';
+import { registrar } from './sync.js';
 import { lerDados } from './dados.js';
 import { normalizar, toast } from './ui.js';
 
@@ -11,9 +11,8 @@ const mesmo = (a, b) => normalizar(a) === normalizar(b);
 export const rotuloCod = (x) => (x.codigo ? `${x.codigo} · ${x.nome}` : x.nome);
 
 async function gravar(action, dados, msg) {
-  await registrar(action, dados);
-  toast(msg, 'ok');
-  enviar();
+  await registrar(action, dados); // fica em Pendências até apertar Enviar
+  toast(msg + ' · aguardando envio', 'ok');
 }
 
 // Só o nome: o código foi tirado do app a pedido do usuário (cadastro livre)

@@ -1,7 +1,7 @@
 import { icone } from '../icones.js';
 import { lerConfig, salvarConfig, tipoConexao } from '../config.js';
 import { chamar } from '../api.js';
-import { enviar } from '../sync.js';
+import { recarregarDados } from '../sync.js';
 import { esc, toast, botoesLimpar } from '../ui.js';
 
 export const titulo = 'Ajustes';
@@ -44,7 +44,7 @@ export function render(el) {
           <label><input type="radio" name="dados" value="nao" ${cfg.dadosMoveis === false ? 'checked' : ''}><span>Só no Wi-Fi</span></label>
         </div>
         <small>${{ wifi: 'Agora: conectado no Wi-Fi.', movel: 'Agora: usando dados móveis.', desconhecida: 'Este celular não informa se é Wi-Fi ou dados móveis; nesse caso o app sempre envia.' }[tipoConexao()]}
-        Com "Só no Wi-Fi", o que você cadastrar fica guardado no celular e vai sozinho quando conectar no Wi-Fi (ou pelo botão Enviar agora).</small>
+        O envio é sempre pelo botão Enviar em Pendências. Com "Só no Wi-Fi", o app pede confirmação antes de enviar pelos dados móveis e não baixa a planilha sozinho fora do Wi-Fi.</small>
       </div>
     </div>
   `;
@@ -55,8 +55,8 @@ export function render(el) {
 
   el.querySelectorAll('input[name="dados"]').forEach((r) => (r.onchange = () => {
     salvarConfig({ ...lerConfig(), dadosMoveis: r.value === 'sim' });
-    toast(r.value === 'sim' ? 'Vai enviar também pelos dados móveis' : 'Vai enviar só no Wi-Fi', 'ok');
-    enviar();
+    toast(r.value === 'sim' ? 'Pode usar os dados móveis' : 'Só no Wi-Fi (pede confirmação nos dados móveis)', 'ok');
+    recarregarDados();
   }));
 
   $('ver').onclick = () => {
@@ -73,7 +73,7 @@ export function render(el) {
     }
     if (!salvarConfig({ ...lerConfig(), ...novo })) return toast('Não foi possível salvar neste navegador', 'erro');
     toast('Salvo!', 'ok');
-    enviar(); // baixa grupos, subgrupos, localizações e bens da planilha
+    recarregarDados(); // baixa grupos, subgrupos, localizações e bens da planilha
   };
 
   $('testar').onclick = async () => {
@@ -87,7 +87,7 @@ export function render(el) {
       const campos = lerCampos();
       const r = await chamar('ping', {}, campos);
       // Conectou: já salva, para os envios usarem a mesma URL/token que foi testada
-      if (r.ok) { salvarConfig({ ...lerConfig(), ...campos }); enviar(true); }
+      if (r.ok) { salvarConfig({ ...lerConfig(), ...campos }); recarregarDados(); }
       res.className = 'resultado ' + (r.ok ? 'ok' : 'erro');
       res.textContent = r.ok ? `Conectado à planilha "${r.planilha}". ` + (r.versao ? `Script atualizado (${r.versao}). Salvo.` : "⚠ Script ANTIGO: atualize o Apps Script (Nova versão).") : `Erro: ${r.erro}`;
     } catch (err) {

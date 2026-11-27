@@ -2,7 +2,7 @@
 import { icone } from './icones.js';
 import { esc, normalizar, botoesLimpar } from './ui.js';
 
-function abrirFolha(html, classe = '') {
+export function abrirFolha(html, classe = '') {
   const dlg = document.createElement('dialog');
   dlg.className = `folha ${classe}`;
   dlg.innerHTML = html;
@@ -13,7 +13,7 @@ function abrirFolha(html, classe = '') {
   return dlg;
 }
 
-const topo = (titulo) => `
+export const topo = (titulo) => `
   <div class="folha__topo">
     <strong>${esc(titulo)}</strong>
     <button type="button" class="botao botao--sec botao--icone" data-fechar aria-label="Fechar">${icone('fechar')}</button>

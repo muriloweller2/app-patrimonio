@@ -138,12 +138,15 @@ function avisar() {
   window.dispatchEvent(new Event('sync'));
 }
 
-/** Liga o envio automático: ao abrir, ao voltar a internet, ao voltar para o app e a cada minuto. */
+/**
+ * O ENVIO É SÓ MANUAL (botão Enviar em Pendências), a pedido do usuário: ele cadastra o setor todo e envia no fim.
+ * Automático é só BAIXAR a planilha (grupos, locais, bens) para conferir nº repetido: ao abrir, ao voltar a internet/app.
+ */
 export function iniciarSync() {
-  window.addEventListener('online', () => enviar());
-  // Trocou de rede (ex.: chegou no Wi-Fi): tenta enviar
-  navigator.connection?.addEventListener?.('change', () => enviar());
-  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && enviar());
-  setInterval(async () => (await estado()).pendentes && enviar(), 60000);
-  enviar();
+  const baixar = () => recarregarDados(60000);
+  window.addEventListener('online', baixar);
+  navigator.connection?.addEventListener?.('change', baixar);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && baixar());
+  recarregarDados();
+  avisar();
 }

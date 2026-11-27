@@ -1,11 +1,13 @@
 import { icone } from '../icones.js';
 import { db } from '../db.js';
 import { lerDados, situacaoNumero, chaveNum } from '../dados.js';
-import { registrar, enviar, situacaoDe, recarregarDados } from '../sync.js';
+import { registrar, recarregarDados, estado } from '../sync.js';
 import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
 import { esc, normalizar, toast, botoesLimpar, botaoX } from '../ui.js';
 import { lerCodigo, lidoPorTexto } from '../leitor.js';
 import { prepararFoto } from '../foto.js';
+import { tirarFoto } from '../camera-foto.js';
+import { editarFoto } from '../editor-foto.js';
 
 export const titulo = 'Incorporar';
 
@@ -72,11 +74,13 @@ export async function render(el) {
 
       <div class="campo">
         <span class="rotulo">Foto do bem <small class="dica">opcional</small></span>
-        <input type="file" id="arquivo-foto" accept="image/*" capture="environment" hidden>
         <button type="button" class="botao botao--sec" id="foto">${icone('camera')} Tirar foto</button>
         <div class="foto-previa" id="previa" hidden>
           <img alt="Foto do bem">
-          <button type="button" class="botao botao--sec botao--icone" id="tirar-foto" aria-label="Remover foto">${icone('lixeira')}</button>
+          <div class="foto-previa__acoes">
+            <button type="button" class="botao botao--sec botao--icone" id="editar-foto" aria-label="Editar foto">${icone('editar')}</button>
+            <button type="button" class="botao botao--sec botao--icone" id="tirar-foto" aria-label="Remover foto">${icone('lixeira')}</button>
+          </div>
         </div>
       </div>
 
@@ -151,13 +155,18 @@ export async function render(el) {
     $('foto').innerHTML = `${icone('camera')} ${foto ? 'Trocar foto' : 'Tirar foto'}`;
     if (foto) $('previa').querySelector('img').src = foto.url;
   }
-  $('foto').onclick = () => $('arquivo-foto').click();
-  $('arquivo-foto').onchange = async (e) => {
-    const arq = e.target.files[0];
-    e.target.value = '';
-    if (!arq) return;
-    try { foto = await prepararFoto(arq); mostrarFoto(); } catch { toast('Não consegui usar essa foto', 'erro'); }
-  };
+  // Câmera própria (flash, foco, zoom) → editor (recortar, girar, texto) → foto diminuída para enviar
+  async function usarFoto(arquivo) {
+    if (!arquivo) return;
+    try {
+      const editado = await editarFoto(arquivo);
+      if (!editado) return;
+      foto = { ...(await prepararFoto(editado)), blob: editado };
+      mostrarFoto();
+    } catch { toast('Não consegui usar essa foto', 'erro'); }
+  }
+  $('foto').onclick = async () => usarFoto(await tirarFoto());
+  $('editar-foto').onclick = () => foto && usarFoto(foto.blob);
   $('tirar-foto').onclick = () => { foto = null; mostrarFoto(); };
 
   // Avisa na hora se o nº já foi incorporado ou desincorporado (confere nos bens e nas desincorporações)
@@ -241,7 +250,7 @@ export async function render(el) {
     };
 
     $('salvar').disabled = true;
-    const op = await registrar('incorporar', foto ? { bem, foto: { base64: foto.base64, mime: foto.mime } } : { bem });
+    await registrar('incorporar', foto ? { bem, foto: { base64: foto.base64, mime: foto.mime } } : { bem });
     await db.gravar('kv', escolha.local, 'ultimaLocalizacao');
 
     // Limpa para o próximo bem, mantendo só a localização
@@ -254,13 +263,9 @@ export async function render(el) {
     $('salvar').disabled = false;
     $('patrimonio').focus();
 
-    if (!navigator.onLine) return toast(`Nº ${bem.patrimonio} salvo no celular. Envia quando voltar a internet.`, 'aviso');
-    toast(`Nº ${bem.patrimonio} salvo. Enviando…`);
-    await enviar();
-    const s = await situacaoDe(op.id);
-    if (s.enviado) toast(`Nº ${bem.patrimonio} enviado para a planilha ✓`, 'ok');
-    else if (s.erro) toast(`Planilha recusou o nº ${bem.patrimonio}: ${s.erro}`, 'erro');
-    else toast(`Nº ${bem.patrimonio} salvo no celular. Envia quando a conexão melhorar.`, 'aviso');
+    // Não envia: fica na fila de Pendências até o usuário apertar Enviar
+    const { pendentes } = await estado();
+    toast(`Nº ${bem.patrimonio} salvo ✓ · ${pendentes} aguardando envio em Pendências`, 'ok');
   };
 
   atualizarSeletores();

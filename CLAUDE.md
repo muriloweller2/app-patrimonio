@@ -114,3 +114,13 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
 - Nº único (2026-11-27, script `2026-11-27b`): um número só pertence a um bem, como nº normal OU alternativo.
   App `situacaoNumero(d, numero)` procura em patrimonio, patrimonioAlt e desincorporados (devolve `comoAlt`); os dois campos avisam em vermelho e bloqueiam salvar; alt igual ao nº normal também bloqueia.
   Backend: `conferirNovo` olha a coluna Alt; `conferirAlternativo` confere o alt do bem novo.
+- Lista do usuário (2026-11-27):
+  1. **Envio só manual**: salvar bem/cadastro só põe na fila (Pendências); envia ao tocar "Enviar N para a planilha".
+     Automático só BAIXA a planilha (`recarregarDados`). Selo do topo: amarelo = aguardando, vermelho = erro.
+     "Só no Wi-Fi" agora = pedir confirmação ao enviar pelos dados móveis + não baixar sozinho fora do Wi-Fi.
+  2. **Pesquisa** (`js/telas/pesquisa.js`, aba no lugar de "Bens"): texto livre (todas as palavras; nº parcial acha normal e alt),
+     filtros Setor/Grupo/Subgrupo/Situação (chips; tocar no ativo limpa), Ativos/Desincorporados/Todos, câmera abre a ficha direto.
+     Ficha em janela (só leitura; botão Alterar entra na etapa 6). Itens sem `cadastradoEm` = "Aguardando envio".
+  3. **Foto**: `js/camera-foto.js` (câmera própria: lanterna como flash, toque p/ focar, zoom por botão e pinça, galeria)
+     → `js/editor-foto.js` (recorte com cantos e proporções Livre/1:1/4:3/3:4, girar 90°, textos arrastáveis com 6 cores e tamanho) → `prepararFoto`.
+  Testado em Chrome headless (editor, pesquisa e filtros com dados de exemplo); câmera só no celular — **aguardando teste real**.

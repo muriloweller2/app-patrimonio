@@ -1,8 +1,8 @@
 import { icone } from '../icones.js';
 import { db } from '../db.js';
-import { enviar, descartar, tentarDeNovo, tentarTodos, estado } from '../sync.js';
+import { enviar, descartar, tentarDeNovo, tentarTodos, estado, recarregarDados } from '../sync.js';
 import { esc, dataHora } from '../ui.js';
-import { configurado } from '../config.js';
+import { configurado, usaDadosMoveis, tipoConexao } from '../config.js';
 
 export const titulo = 'Envios pendentes';
 
@@ -26,9 +26,8 @@ export async function render(el) {
     <h2>Envios pendentes</h2>
     <p class="sub">${fila.length ? `${fila.length} item(ns) ainda não chegaram na planilha.` : 'Tudo enviado para a planilha.'}</p>
     ${!configurado() ? `<div class="aviso">${icone('ferramenta')}<div>Configure a conexão em <a href="#/ajustes">Ajustes</a>.</div></div>` : ''}
-    ${st.aguardandoWifi && fila.length ? `<div class="aviso">${icone('nuvem')}<div>Você está nos dados móveis e o envio por dados móveis está desligado em <a href="#/ajustes">Ajustes</a>. Vai enviar ao conectar no Wi-Fi, ou toque em Enviar agora.</div></div>` : ''}
     ${st.ultimoErro ? `<div class="aviso">${icone('alerta')}<div>Último envio falhou: ${esc(st.ultimoErro)}</div></div>` : ''}
-    ${fila.length ? `<button class="botao botao--bloco" id="enviar" ${st.enviando ? 'disabled' : ''}>${icone('nuvem')} ${st.enviando ? 'Enviando…' : 'Enviar agora'}</button>` : `<div class="vazio">${icone('nuvem')}</div>`}
+    ${fila.length ? `<button class="botao botao--bloco" id="enviar" ${st.enviando ? 'disabled' : ''}>${icone('nuvem')} ${st.enviando ? 'Enviando…' : `Enviar ${fila.length - st.erros || ''} para a planilha`}</button>` : `<div class="vazio">${icone('nuvem')}</div>`}
     ${st.erros > 1 ? `<button class="botao botao--sec botao--bloco" id="todos" ${st.enviando ? 'disabled' : ''}>Tentar de novo os ${st.erros} recusados</button>` : ''}
     <ul class="lista lista--fila">
       ${fila.map((op) => `
@@ -47,13 +46,16 @@ export async function render(el) {
     </ul>
   `;
 
-  el.querySelector('#enviar')?.addEventListener('click', async () => { await enviar(true); render(el); });
-  el.querySelector('#todos')?.addEventListener('click', async () => { await tentarTodos(); render(el); });
-  el.querySelectorAll('[data-tentar]').forEach((b) => (b.onclick = async () => { await tentarDeNovo(b.dataset.tentar); render(el); }));
+  // Só no Wi-Fi + dados móveis agora = confirma antes (fotos gastam dados)
+  const liberado = () => usaDadosMoveis() || tipoConexao() !== 'movel'
+    || confirm('Você está nos dados móveis e escolheu "Só no Wi-Fi" em Ajustes. Enviar mesmo assim?');
+  el.querySelector('#enviar')?.addEventListener('click', async () => { if (!liberado()) return; await enviar(true); render(el); });
+  el.querySelector('#todos')?.addEventListener('click', async () => { if (!liberado()) return; await tentarTodos(); render(el); });
+  el.querySelectorAll('[data-tentar]').forEach((b) => (b.onclick = async () => { if (!liberado()) return; await tentarDeNovo(b.dataset.tentar); render(el); }));
   el.querySelectorAll('[data-descartar]').forEach((b) => (b.onclick = async () => {
     if (!confirm('Descartar este item? Ele não será enviado para a planilha.')) return;
     await descartar(b.dataset.descartar);
-    await enviar(true); // recarrega os dados da planilha para desfazer a mudança local
+    await recarregarDados(); // recarrega os dados da planilha para desfazer a mudança local (não envia nada)
     render(el);
   }));
 }
