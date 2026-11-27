@@ -2,7 +2,7 @@ import { icone } from '../icones.js';
 import { db } from '../db.js';
 import { lerDados, situacaoNumero, chaveNum } from '../dados.js';
 import { registrar, recarregarDados, estado, alterarBem } from '../sync.js';
-import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
+import { escolherGrupo, escolherSubgrupo, locais, SITUACOES, rotuloCod } from '../cadastros.js';
 import { esc, normalizar, toast, botoesLimpar, botaoX } from '../ui.js';
 import { lerCodigo, lidoPorTexto } from '../leitor.js';
 import { prepararFoto, fotoDoBem } from '../foto.js';
@@ -47,9 +47,9 @@ export async function render(el, numeroEdicao = null) {
   }
   const mesmo = (a, b) => normalizar(a) === normalizar(b);
   const escolha = editando ? {
-    grupo: original.grupo ? (dados.grupos.find((g) => mesmo(g.nome, original.grupo)) || { nome: original.grupo, codigo: original.grupoCod || '' }) : null,
+    grupo: original.grupo ? (dados.grupos.find((g) => mesmo(g.nome, original.grupo)) || { nome: original.grupo }) : null,
     subgrupo: original.subgrupo ? (dados.subgrupos.find((x) => mesmo(x.grupo, original.grupo) && mesmo(x.nome, original.subgrupo))
-      || { grupo: original.grupo, nome: original.subgrupo, codigo: original.subgrupoCod || '' }) : null,
+      || { grupo: original.grupo, nome: original.subgrupo }) : null,
     local: original.localizacao || null,
     situacao: original.situacao || null,
   } : { grupo: null, subgrupo: null, local: (await db.ler('kv', 'ultimaLocalizacao')) || null, situacao: null };
@@ -84,7 +84,12 @@ export async function render(el, numeroEdicao = null) {
       </div>
       ${texto('serie', 'Nº de Série')}
       ${texto('especificacao', 'Especificação', { dica: 'Cor, dimensões etc.', area: true })}
-      ${seletor('situacao', 'Situação', false, 'Escolher situação')}
+      <div class="campo">
+        <span class="rotulo">Situação <small class="dica">toque de novo para desmarcar</small></span>
+        <div class="segmentado segmentado--5" role="radiogroup" id="situacao">
+          ${SITUACOES.map((s) => `<label><input type="radio" name="situacao" value="${s}"><span>${s}</span></label>`).join('')}
+        </div>
+      </div>
 
       <div class="campo">
         <span class="rotulo">Incorporado por doação?</span>
@@ -118,7 +123,7 @@ export async function render(el, numeroEdicao = null) {
   botoesLimpar(el, icone);
   // "x" nos campos de escolher: limpa a escolha (limpar o grupo limpa também o subgrupo)
   const xSel = {};
-  ['grupo', 'subgrupo', 'local', 'situacao'].forEach((id) => {
+  ['grupo', 'subgrupo', 'local'].forEach((id) => {
     xSel[id] = botaoX($(id), icone, 'limpavel--seletor');
     xSel[id].onclick = () => {
       escolha[id] = null;
@@ -138,7 +143,6 @@ export async function render(el, numeroEdicao = null) {
     mostrar('grupo', escolha.grupo && rotuloCod(escolha.grupo));
     mostrar('subgrupo', escolha.subgrupo && rotuloCod(escolha.subgrupo));
     mostrar('local', escolha.local);
-    mostrar('situacao', escolha.situacao);
     $('subgrupo').disabled = !escolha.grupo;
   }
   const marcarOk = (id) => el.querySelector(`[data-campo="${id}"]`)?.classList.remove('invalido');
@@ -158,10 +162,13 @@ export async function render(el, numeroEdicao = null) {
     const l = await locais.escolher();
     if (l) { escolha.local = l.nome; atualizarSeletores(); marcarOk('local'); }
   };
-  $('situacao').onclick = async () => {
-    const s = await situacoes.escolher();
-    if (s) { escolha.situacao = s.nome; atualizarSeletores(); }
-  };
+  // Situação: opções fixas; tocar na marcada desmarca
+  const radiosSit = [...el.querySelectorAll('input[name="situacao"]')];
+  const marcarSituacao = () => radiosSit.forEach((r) => (r.checked = !!escolha.situacao && normalizar(r.value) === normalizar(escolha.situacao)));
+  radiosSit.forEach((r) => r.addEventListener('click', () => {
+    escolha.situacao = escolha.situacao && normalizar(escolha.situacao) === normalizar(r.value) ? null : r.value;
+    marcarSituacao();
+  }));
   el.querySelectorAll('[data-ler]').forEach((b) => {
     b.onclick = async () => {
       const id = b.dataset.ler;
@@ -265,9 +272,7 @@ export async function render(el, numeroEdicao = null) {
     const bem = {
       patrimonio: valorTexto('patrimonio'),
       patrimonioAlt: valorTexto('patrimonioAlt'),
-      grupoCod: escolha.grupo.codigo || '',
       grupo: escolha.grupo.nome,
-      subgrupoCod: escolha.subgrupo.codigo || '',
       subgrupo: escolha.subgrupo.nome,
       descricao: valorTexto('descricao'),
       marca: valorTexto('marca'),
@@ -310,6 +315,7 @@ export async function render(el, numeroEdicao = null) {
   };
 
   atualizarSeletores();
+  marcarSituacao();
 
   if (editando) {
     CAMPOS_TEXTO.forEach((id) => ($(id).value = original[id] || ''));

@@ -7,6 +7,7 @@ import { escolher, abrirFolha, topo } from '../componentes.js';
 import { esc, normalizar, toast, botoesLimpar } from '../ui.js';
 import { lerCodigo, lidoPorTexto } from '../leitor.js';
 import { fotoDoBem } from '../foto.js';
+import { SITUACOES } from '../cadastros.js';
 
 export const titulo = 'Pesquisa';
 
@@ -96,7 +97,7 @@ export async function render(el) {
         local: () => d.locais.map((x) => ({ nome: x, rotulo: x })),
         grupo: () => d.grupos.map((g) => ({ nome: g.nome, rotulo: g.nome })),
         subgrupo: () => d.subgrupos.filter((s) => normalizar(s.grupo) === normalizar(f.grupo)).map((s) => ({ nome: s.nome, rotulo: s.nome })),
-        situacao: () => d.situacoes.map((x) => ({ nome: x, rotulo: x })),
+        situacao: () => SITUACOES.map((x) => ({ nome: x, rotulo: x })),
       };
       const titulos = { local: 'Setor', grupo: 'Grupo', subgrupo: `Subgrupo — ${f.grupo}`, situacao: 'Situação' };
       const item = await escolher({ titulo: titulos[chave], itens: listas[chave]() });

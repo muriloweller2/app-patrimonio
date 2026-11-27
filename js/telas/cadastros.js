@@ -1,6 +1,6 @@
 import { icone } from '../icones.js';
 import { lerDados } from '../dados.js';
-import { escolherGrupo, novoGrupo, editarGrupo, novoSubgrupo, editarSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
+import { escolherGrupo, novoGrupo, editarGrupo, novoSubgrupo, editarSubgrupo, locais, rotuloCod } from '../cadastros.js';
 import { esc, normalizar, toast, botoesLimpar } from '../ui.js';
 
 export const titulo = 'Cadastros';
@@ -29,7 +29,6 @@ export async function render(el) {
       editar: editarSubgrupo,
     },
     locais: { nome: 'Locais', itens: d.locais, rotulo: (l) => l, novo: () => locais.novo(), editar: locais.editar },
-    situacoes: { nome: 'Situações', itens: d.situacoes, rotulo: (s) => s, novo: () => situacoes.novo(), editar: situacoes.editar },
   };
 
   el.innerHTML = `

@@ -86,7 +86,10 @@ export async function escolherSubgrupo(grupo) {
   });
 }
 
-// ── Listas só com nome (Localizações e Situações) ──
+// Situação do bem: lista fixa
+export const SITUACOES = ['ÓTIMO', 'BOM', 'REGULAR', 'RUIM', 'PÉSSIMO'];
+
+// ── Lista só com nome (Localizações) ──
 function listaSimples({ lista, sufixo, nome, novoNome, rotulo }) {
   const novo = async () => {
     const v = await formulario({ titulo: novoNome, campos: [{ nome: 'nome', rotulo }] });
@@ -117,4 +120,3 @@ function listaSimples({ lista, sufixo, nome, novoNome, rotulo }) {
 }
 
 export const locais = listaSimples({ lista: 'locais', sufixo: 'Local', nome: 'localização', novoNome: 'Nova localização', rotulo: 'Localização' });
-export const situacoes = listaSimples({ lista: 'situacoes', sufixo: 'Situacao', nome: 'situação', novoNome: 'Nova situação', rotulo: 'Situação' });

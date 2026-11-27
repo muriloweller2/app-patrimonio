@@ -1,4 +1,4 @@
-const VERSAO_SCRIPT = '2026-11-27c';
+const VERSAO_SCRIPT = '2026-11-27e';
 /**
  * App Patrimônio — backend (Google Apps Script vinculado à planilha)
  *
@@ -23,9 +23,7 @@ const ABAS = {
 const CAMPOS = [
   ['patrimonio', 'Nº Patrimônio'],
   ['patrimonioAlt', 'Nº Patrimônio Alt.'],
-  ['grupoCod', 'Cód. Grupo'],
   ['grupo', 'Grupo'],
-  ['subgrupoCod', 'Cód. Subgrupo'],
   ['subgrupo', 'Subgrupo'],
   ['descricao', 'Descrição'],
   ['marca', 'Marca'],
@@ -38,6 +36,7 @@ const CAMPOS = [
   ['foto', 'Foto'],
 ];
 const ROTULOS = CAMPOS.map(c => c[1]);
+const SITUACOES = ['ÓTIMO', 'BOM', 'REGULAR', 'RUIM', 'PÉSSIMO'];
 const LANCADO = 'Lançado no Wareline';
 
 const CABECALHOS = {
@@ -45,8 +44,8 @@ const CABECALHOS = {
   [ABAS.INC]: ['Data', 'Hora', ...ROTULOS, LANCADO, 'ID'],
   [ABAS.ALT]: ['Data', 'Hora', 'Nº Patrimônio', 'Descrição', 'Campo', 'Valor anterior', 'Novo valor', LANCADO, 'ID'],
   [ABAS.DES]: ['Data', 'Hora', 'Nº Patrimônio', 'Descrição', LANCADO, 'ID'],
-  [ABAS.GRUPOS]: ['Nome', 'Código'],
-  [ABAS.SUBGRUPOS]: ['Grupo', 'Nome', 'Código'],
+  [ABAS.GRUPOS]: ['Nome'],
+  [ABAS.SUBGRUPOS]: ['Grupo', 'Nome'],
   [ABAS.LOCAIS]: ['Nome'],
   [ABAS.SITUACOES]: ['Nome'],
 };
@@ -90,11 +89,16 @@ function processar(req) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) return { ok: false, erro: 'Planilha ocupada. O app tenta de novo sozinho.', versao: VERSAO_SCRIPT };
   try {
+    migrarPlanilha();
+    migrarFotos();
     const ops = req.action === 'lote' ? (req.ops || []) : [req];
     const resultados = ops.map(executarSeguro);
-    // Se mexeu em bens, atualiza as abas Consulta e Por Setor
+    // Se mexeu em bens, atualiza as abas Consulta e Por Setor e acerta a largura das colunas
     if (ops.some(o => ['incorporar', 'alterar', 'desincorporar'].includes(o.action))) {
-      try { atualizarVisoes(planilha()); } catch (err) { /* não impede o envio */ }
+      try {
+        atualizarVisoes(planilha());
+        [ABAS.BENS, ABAS.INC, ABAS.ALT, ABAS.DES].forEach(n => ajustarLarguras(aba(n)));
+      } catch (err) { /* não impede o envio */ }
     }
     return req.action === 'lote' ? { ok: true, versao: VERSAO_SCRIPT, resultados } : resultados[0];
   } finally {
@@ -120,7 +124,7 @@ function executar(op) {
     case 'desincorporar': return desincorporar(op);
     case 'salvarGrupo': return salvarGrupo(op);
     case 'excluirGrupo': return excluirAux(ABAS.GRUPOS, [op.nome]);
-    case 'salvarSubgrupo': return salvarAux(ABAS.SUBGRUPOS, 2, [op.grupo, op.nome, op.codigo], op.anterior);
+    case 'salvarSubgrupo': return salvarAux(ABAS.SUBGRUPOS, 2, [op.grupo, op.nome], op.anterior);
     case 'excluirSubgrupo': return excluirAux(ABAS.SUBGRUPOS, [op.grupo, op.nome]);
     case 'salvarLocal': return salvarAux(ABAS.LOCAIS, 1, [op.nome], op.anterior);
     case 'excluirLocal': return excluirAux(ABAS.LOCAIS, [op.nome]);
@@ -144,7 +148,9 @@ function incorporar(op) {
   const m = momento(op.quando);
   const valores = CAMPOS.map(c => b[c[0]] || '');
 
-  aba(ABAS.BENS).appendRow([...valores, 'ATIVO', m.dataHora, ''].map(fixo));
+  const shB = aba(ABAS.BENS);
+  shB.appendRow([...valores, 'ATIVO', m.dataHora, ''].map(fixo));
+  mascararFotos(shB.getRange(shB.getLastRow(), 1, 1, CAMPOS.length));
   registrar(ABAS.INC, [m.data, m.hora, ...valores, false, op.id || '']);
   return { msg: 'Incorporado', foto: b.foto || '' };
 }
@@ -166,6 +172,8 @@ function alterar(op) {
   if (op.foto) novo.foto = salvarFoto(op.foto, novo.patrimonio);
   const sh = aba(ABAS.BENS);
   const atual = sh.getRange(linha, 1, 1, CAMPOS.length).getDisplayValues()[0];
+  const iFoto = CAMPOS.findIndex(c => c[0] === 'foto');
+  atual[iFoto] = urlDaCelula(sh.getRange(linha, iFoto + 1));
   const m = momento(op.quando);
   const descricao = novo.descricao || atual[CAMPOS.findIndex(c => c[0] === 'descricao')];
   let mudancas = 0;
@@ -176,6 +184,7 @@ function alterar(op) {
     const depois = String(novo[chave] || '');
     if (antes === depois) return;
     sh.getRange(linha, i + 1).setValue(fixo(depois));
+    if (chave === 'foto') mascararFotos(sh.getRange(linha, i + 1));
     registrar(ABAS.ALT, [m.data, m.hora, novo.patrimonio, descricao, rotulo, antes, depois, false, op.id || '']);
     mudancas++;
   });
@@ -227,7 +236,7 @@ function lerDados() {
   };
   const cabBens = CABECALHOS[ABAS.BENS];
   return {
-    bens: linhas(ABAS.BENS).map(r => {
+    bens: linhasBens(planilha()).map(r => {
       const o = {};
       CAMPOS.forEach(([chave], i) => (o[chave] = r[i]));
       o.status = r[cabBens.indexOf('Status')];
@@ -235,8 +244,8 @@ function lerDados() {
       o.atualizadoEm = r[cabBens.indexOf('Atualizado em')];
       return o;
     }),
-    grupos: linhas(ABAS.GRUPOS).map(r => ({ nome: r[0], codigo: r[1] })),
-    subgrupos: linhas(ABAS.SUBGRUPOS).map(r => ({ grupo: r[0], nome: r[1], codigo: r[2] })),
+    grupos: linhas(ABAS.GRUPOS).map(r => ({ nome: r[0] })),
+    subgrupos: linhas(ABAS.SUBGRUPOS).map(r => ({ grupo: r[0], nome: r[1] })),
     locais: linhas(ABAS.LOCAIS).map(r => r[0]),
     situacoes: linhas(ABAS.SITUACOES).map(r => r[0]),
     desincorporados: linhas(ABAS.DES).map(r => ({ data: r[0], patrimonio: r[2], descricao: r[3] })),
@@ -395,6 +404,39 @@ function registrar(nome, linha) {
   const r = sh.getLastRow();
   sh.getRange(r, 1).setNumberFormat('dd/mm/yyyy');
   sh.getRange(r, CABECALHOS[nome].indexOf(LANCADO) + 1).insertCheckboxes();
+  mascararFotos(sh.getRange(r, 1, 1, linha.length));
+}
+
+// ── Foto: a célula mostra "FOTO" e o endereço fica no link ──
+const EH_FOTO = /^https:\/\/drive\.google\.com\//;
+
+/** Troca os endereços de foto do Drive no intervalo por um link escrito "FOTO" (só nas células que têm foto). */
+function mascararFotos(range) {
+  const v = range.getDisplayValues();
+  v.forEach((linha, i) => linha.forEach((x, j) => {
+    if (!EH_FOTO.test(x)) return;
+    range.getCell(i + 1, j + 1).setRichTextValue(SpreadsheetApp.newRichTextValue().setText('FOTO').setLinkUrl(x).build());
+  }));
+}
+
+/** Endereço guardado na célula: o link (se mascarada) ou o próprio texto. */
+function urlDaCelula(cel) {
+  const rt = cel.getRichTextValue();
+  return (rt && rt.getLinkUrl()) || cel.getDisplayValue();
+}
+
+/** Linhas de Bens com o endereço real da foto (e não o texto "FOTO"). */
+function linhasBens(ss) {
+  const sh = ss.getSheetByName(ABAS.BENS);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const n = sh.getLastRow() - 1;
+  const r = sh.getRange(2, 1, n, sh.getLastColumn()).getDisplayValues();
+  const col = CABECALHOS[ABAS.BENS].indexOf('Foto');
+  sh.getRange(2, col + 1, n, 1).getRichTextValues().forEach((x, i) => {
+    const url = x[0] && x[0].getLinkUrl();
+    if (url) r[i][col] = url;
+  });
+  return r;
 }
 
 /** Data/hora da operação no fuso da planilha. Usa o horário em que foi feita no celular (mesmo se enviada depois). */
@@ -437,6 +479,60 @@ function lerFoto(url) {
   return { base64: Utilities.base64Encode(b.getBytes()), mime: b.getContentType() || 'image/jpeg' };
 }
 
+/**
+ * Largura das colunas pelo conteúdo, com limites: texto longo (descrição, especificação) não passa de 320 px
+ * e o link da foto fica estreito (o texto é cortado, o link continua inteiro na célula).
+ */
+function ajustarLarguras(sh, linhaCab) {
+  if (!sh || sh.getLastColumn() < 1) return;
+  const n = sh.getLastColumn();
+  const cab = sh.getRange(linhaCab || 1, 1, 1, n).getDisplayValues()[0];
+  sh.autoResizeColumns(1, n);
+  cab.forEach((c, i) => {
+    const max = c === 'Foto' ? 70 : /Descri|Especifica|Detalhe|Valor|Novo valor/.test(c) ? 320 : 240;
+    const w = sh.getColumnWidth(i + 1);
+    const novo = Math.min(Math.max(w + 12, 70), max);
+    if (novo !== w) sh.setColumnWidth(i + 1, novo);
+    if (c === 'Foto') sh.getRange(1, i + 1, sh.getMaxRows(), 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+  });
+}
+
+/** Ajustes em planilhas já em uso. Roda uma vez sozinho (no próximo envio do app). */
+function migrarPlanilha() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('MIGRACAO') === 'sem-codigos') return;
+  const ss = planilha();
+  // Tira as colunas de código (não são usadas)
+  [ABAS.BENS, ABAS.INC, ABAS.GRUPOS, ABAS.SUBGRUPOS].forEach(nome => {
+    const sh = ss.getSheetByName(nome);
+    if (!sh || sh.getLastColumn() < 1) return;
+    const cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
+    for (let i = cab.length - 1; i >= 0; i--) {
+      if (['Cód. Grupo', 'Cód. Subgrupo', 'Código'].includes(cab[i])) sh.deleteColumn(i + 1);
+    }
+  });
+  // Situações fixas do app
+  const sit = ss.getSheetByName(ABAS.SITUACOES);
+  if (sit) {
+    if (sit.getLastRow() > 1) sit.getRange(2, 1, sit.getLastRow() - 1, sit.getLastColumn()).clearContent();
+    sit.getRange(2, 1, SITUACOES.length, 1).setValues(SITUACOES.map(s => [s]));
+  }
+  [ABAS.BENS, ABAS.INC, ABAS.ALT, ABAS.DES, ABAS.GRUPOS, ABAS.SUBGRUPOS, ABAS.LOCAIS].forEach(n => ajustarLarguras(ss.getSheetByName(n)));
+  props.setProperty('MIGRACAO', 'sem-codigos');
+}
+
+/** Fotos já gravadas como endereço viram "FOTO" com link. Roda uma vez. */
+function migrarFotos() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('MIGRACAO_FOTO') === 'feito') return;
+  const ss = planilha();
+  [ABAS.BENS, ABAS.INC, ABAS.ALT].forEach(nome => {
+    const sh = ss.getSheetByName(nome);
+    if (sh && sh.getLastRow() > 1) mascararFotos(sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()));
+  });
+  props.setProperty('MIGRACAO_FOTO', 'feito');
+}
+
 // ───────────────────────── Configuração (rodar uma vez) ─────────────────────────
 
 function onOpen() {
@@ -452,6 +548,8 @@ function configurarPlanilha() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
   props.setProperty('PLANILHA_ID', ss.getId());
+  migrarPlanilha(); // antes de gravar os cabeçalhos novos
+  migrarFotos();
 
   Object.keys(CABECALHOS).forEach(nome => {
     const cab = CABECALHOS[nome];
@@ -463,8 +561,8 @@ function configurarPlanilha() {
     const colsTexto = cab.map((c, i) => (/^(Nº|Cód|Código|ID)/.test(c) ? i + 1 : 0)).filter(Boolean);
     colsTexto.forEach(c => sh.getRange(2, c, sh.getMaxRows() - 1, 1).setNumberFormat('@'));
     if (cab[0] === 'Data') sh.getRange(2, 1, sh.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy');
-    sh.autoResizeColumns(1, cab.length);
   });
+  Object.keys(CABECALHOS).forEach(nome => ajustarLarguras(ss.getSheetByName(nome)));
 
   configurarConsulta(ss);
   configurarPorSetor(ss);
@@ -568,6 +666,7 @@ function escreverBloco(sh, linha, titulo, cab, linhas, largura) {
   }
   if (linhas.length) {
     sh.getRange(linha, 1, linhas.length, largura).setNumberFormat('@').setValues(linhas);
+    mascararFotos(sh.getRange(linha, 1, linhas.length, largura));
     linha += linhas.length;
   }
   return linha + 1;
@@ -582,7 +681,7 @@ function preencherConsulta(ss) {
 
   const cab = CABECALHOS[ABAS.BENS];
   const iAlt = cab.indexOf('Nº Patrimônio Alt.');
-  const bens = linhasDe(ss, ABAS.BENS);
+  const bens = linhasBens(ss);
   let bem = bens.find(r => chaveNum(r[0]) === busca || (r[iAlt] && chaveNum(r[iAlt]) === busca));
 
   // Sem número exato: procura parte do número (1733 acha 001733, 017331...) ou parte da descrição
@@ -650,7 +749,7 @@ function preencherPorSetor(ss) {
   const idx = cols.map(c => cab.indexOf(c));
   const iLocal = cab.indexOf('Localização');
   const iStatus = cab.indexOf('Status');
-  const bens = linhasDe(ss, ABAS.BENS)
+  const bens = linhasBens(ss)
     .filter(r => r[iLocal].trim().toLowerCase() === setor && r[iStatus] !== 'DESINCORPORADO')
     .map(r => idx.map(i => r[i]))
     .sort((a, b) => a[2].localeCompare(b[2], 'pt-BR'));
@@ -658,6 +757,7 @@ function preencherPorSetor(ss) {
   sh.getRange('D1').setValue(bens.length + ' bem(ns) ativo(s)').setFontWeight('bold');
   const vazio = [cols.map((c, i) => (i ? '' : 'Nenhum bem ativo neste setor'))];
   escreverBloco(sh, 3, 'BENS DO SETOR', cols, bens.length ? bens : vazio, cols.length);
+  ajustarLarguras(sh, 4);
 }
 
 function mostrarToken() {
@@ -666,7 +766,7 @@ function mostrarToken() {
 
 /** Salva o grupo; se foi renomeado, atualiza o nome do grupo nos subgrupos dele. */
 function salvarGrupo(op) {
-  const r = salvarAux(ABAS.GRUPOS, 1, [op.nome, op.codigo], op.anterior);
+  const r = salvarAux(ABAS.GRUPOS, 1, [op.nome], op.anterior);
   const antigo = op.anterior && texto(op.anterior[0]);
   if (antigo && antigo.toLowerCase() !== texto(op.nome).toLowerCase()) {
     const sh = aba(ABAS.SUBGRUPOS);

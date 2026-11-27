@@ -39,7 +39,6 @@ export async function render(el) {
       <a href="#/cadastros?aba=grupos">${icone('camadas')}<span>Grupos</span><small>${d.grupos.length}</small></a>
       <a href="#/cadastros?aba=subgrupos">${icone('lista')}<span>Subgrupos</span><small>${d.subgrupos.length}</small></a>
       <a href="#/cadastros?aba=locais">${icone('local')}<span>Locais</span><small>${d.locais.length}</small></a>
-      <a href="#/cadastros?aba=situacoes">${icone('etiqueta')}<span>Situações</span><small>${d.situacoes.length}</small></a>
     </div>
 
     <p class="secao">Hoje, neste celular</p>

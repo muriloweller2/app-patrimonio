@@ -86,7 +86,7 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
   janelas `js/componentes.js` (escolher com busca / formulario), `js/cadastros.js`, telas incorporar/cadastros/pendencias.
   Decisões: **Situação, Grupo, Subgrupo e Localização são listas fixas cadastradas SÓ na aba Cadastros** (na Incorporar apenas se escolhe).
   Grupo/Subgrupo: **só nome** (campo código tirado do app em 2026-11-26 a pedido do usuário); identificação pelo nome; subgrupo liga ao grupo pelo nome (renomear grupo propaga).
-  Abas: Grupos [Nome, Código], Subgrupos [Grupo, Nome, Código], Situações [Nome].
+  Abas: Grupos [Nome], Subgrupos [Grupo, Nome], Situações [Nome] (colunas de código removidas em 2026-11-27).
   Obrigatórios na incorporação: nº patrimônio, descrição, grupo, subgrupo, localização. Após salvar mantém só a localização.
   Fila: envia em lote ao abrir, ao voltar internet/app e a cada 1 min se houver pendente; erros da planilha ficam em #/pendencias.
   Só verificado com node (sintaxe/imports) — **aguardando teste real do usuário**.
@@ -130,3 +130,13 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
   Backend: `alterar` acha a linha por `anterior`, `conferirLivre` (nº/alt não podem ser de OUTRO bem), registra cada campo em Alterações.
   Foto: ação `foto {url}` devolve base64 (só arquivos da pasta do app, sem tornar a foto pública); app guarda cópia em kv `foto:<url>` (`fotoDoBem` em foto.js).
   Testado em Chrome headless (ficha+foto da fila, edição de pendente, troca de nº, aviso de alt duplicado). Foto do Drive e envio real: **aguardando teste**.
+
+- 2026-11-27 (Codigo.gs `2026-11-27d`, SW v27): **colunas de código removidas** (Cód. Grupo/Cód. Subgrupo em Bens e Incorporações,
+  Código em Grupos/Subgrupos). `migrarPlanilha()` apaga essas colunas sozinha no 1º envio após a Nova versão (flag `MIGRACAO=sem-codigos`
+  nas Propriedades) e também roda no início de `configurarPlanilha`. `ajustarLarguras(sh, linhaCab)`: autoResize + limites
+  (Foto 110 px cortado, Descrição/Especificação/valores 320, demais 240), roda após envios de bens e no Por Setor.
+  **Situação = lista fixa** ÓTIMO/BOM/REGULAR/RUIM/PÉSSIMO (`SITUACOES` em js/cadastros.js), botões no formulário (tocar de novo desmarca);
+  cadastro de Situações saiu do app (aba da planilha recebe as 5 na migração).
+- 2026-11-27 (Codigo.gs `2026-11-27e`): célula da foto mostra **"FOTO" com link** (rich text; `mascararFotos`), em Bens, Incorporações,
+  Alterações, Consulta e Por Setor. Leitura do endereço pelo link: `linhasBens`/`urlDaCelula` (lerDados, alterar, Consulta, Por Setor).
+  `migrarFotos()` mascara as fotos antigas uma vez (flag `MIGRACAO_FOTO=feito`).

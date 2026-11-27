@@ -110,7 +110,7 @@ h2 { font-size: 22px; margin: 4px 0 4px; }
 .acao > .ico:last-child { color: var(--texto-suave); }
 
 /* Atalhos de cadastros (tela inicial) */
-.atalhos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.atalhos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .atalhos a {
   display: grid; justify-items: center; gap: 4px; padding: 14px 4px;
   background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); box-shadow: var(--sombra);
@@ -383,6 +383,8 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .chip:disabled { opacity: .45; }
 .segmentado--3 { grid-template-columns: repeat(3, 1fr); }
 .segmentado--3 span { font-size: 14px; }
+.segmentado--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; padding: 3px; }
+.segmentado--5 span { font-size: 11px; padding: 0; letter-spacing: -.03em; }
 .conta { margin: 12px 0 8px; }
 .lista button[data-i] strong { font-weight: 600; }
 .lista .alt { display: inline; font-weight: 400; }
