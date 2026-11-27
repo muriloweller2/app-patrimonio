@@ -124,3 +124,9 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
   3. **Foto**: `js/camera-foto.js` (câmera própria: lanterna como flash, toque p/ focar, zoom por botão e pinça, galeria)
      → `js/editor-foto.js` (recorte com cantos e proporções Livre/1:1/4:3/3:4, girar 90°, textos arrastáveis com 6 cores e tamanho) → `prepararFoto`.
   Testado em Chrome headless (editor, pesquisa e filtros com dados de exemplo); câmera só no celular — **aguardando teste real**.
+- Etapa 6 parte 1 — Alterar (2026-11-27, script `2026-11-27c`): ficha da Pesquisa mostra a **foto** no alto (tocar amplia) e botão **Alterar**
+  → rota `#/alterar?n=NUM` = formulário da Incorporar em modo edição (`alterarTela` em incorporar.js), todos os campos, inclusive o nº.
+  Salvar só põe na fila (`alterarBem` em sync.js): se a incorporação ainda está na fila, corrige ela mesma; senão op `alterar {anterior, bem, foto?}`.
+  Backend: `alterar` acha a linha por `anterior`, `conferirLivre` (nº/alt não podem ser de OUTRO bem), registra cada campo em Alterações.
+  Foto: ação `foto {url}` devolve base64 (só arquivos da pasta do app, sem tornar a foto pública); app guarda cópia em kv `foto:<url>` (`fotoDoBem` em foto.js).
+  Testado em Chrome headless (ficha+foto da fila, edição de pendente, troca de nº, aviso de alt duplicado). Foto do Drive e envio real: **aguardando teste**.

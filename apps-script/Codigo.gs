@@ -1,4 +1,4 @@
-const VERSAO_SCRIPT = '2026-11-27b';
+const VERSAO_SCRIPT = '2026-11-27c';
 /**
  * App Patrimônio — backend (Google Apps Script vinculado à planilha)
  *
@@ -84,6 +84,9 @@ function processar(req) {
   const token = PropertiesService.getScriptProperties().getProperty('TOKEN');
   if (!token || req.token !== token) return { ok: false, erro: 'Token inválido.' };
 
+  // Foto só lê o Drive: não precisa esperar a vez na planilha
+  if (req.action === 'foto') return executarSeguro(req);
+
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) return { ok: false, erro: 'Planilha ocupada. O app tenta de novo sozinho.', versao: VERSAO_SCRIPT };
   try {
@@ -113,6 +116,7 @@ function executar(op) {
     case 'dados': return lerDados();
     case 'incorporar': return incorporar(op);
     case 'alterar': return alterar(op);
+    case 'foto': return lerFoto(op.url);
     case 'desincorporar': return desincorporar(op);
     case 'salvarGrupo': return salvarGrupo(op);
     case 'excluirGrupo': return excluirAux(ABAS.GRUPOS, [op.nome]);
@@ -149,8 +153,15 @@ function alterar(op) {
   const novo = normalizarBem(op.bem);
   if (!novo.patrimonio) throw new Error('Informe o nº de patrimônio.');
   if (jaProcessado(ABAS.ALT, op.id)) return { msg: 'Já enviado antes', duplicado: true };
-  const linha = acharLinhaBem(novo.patrimonio);
-  if (!linha) throw new Error('Patrimônio ' + novo.patrimonio + ' não encontrado em Bens.');
+  // `anterior` = nº antes da alteração (permite trocar o próprio nº de patrimônio)
+  const antigo = texto(op.anterior) || novo.patrimonio;
+  const linha = acharLinhaBem(antigo);
+  if (!linha) throw new Error('Patrimônio ' + antigo + ' não encontrado em Bens.');
+  if (novo.patrimonio !== antigo) conferirLivre(novo.patrimonio, linha, 'Nº ');
+  if (novo.patrimonioAlt) {
+    if (novo.patrimonioAlt === novo.patrimonio) throw new Error('O nº alternativo não pode ser igual ao nº de patrimônio.');
+    conferirLivre(novo.patrimonioAlt, linha, 'Nº alternativo ');
+  }
 
   if (op.foto) novo.foto = salvarFoto(op.foto, novo.patrimonio);
   const sh = aba(ABAS.BENS);
@@ -160,7 +171,7 @@ function alterar(op) {
   let mudancas = 0;
 
   CAMPOS.forEach(([chave, rotulo], i) => {
-    if (chave === 'patrimonio' || !(chave in novo)) return;
+    if (!(chave in novo)) return;
     const antes = String(atual[i] || '');
     const depois = String(novo[chave] || '');
     if (antes === depois) return;
@@ -170,7 +181,16 @@ function alterar(op) {
   });
 
   if (mudancas) sh.getRange(linha, CABECALHOS[ABAS.BENS].length).setValue(m.dataHora);
-  return { msg: mudancas ? mudancas + ' campo(s) alterado(s)' : 'Nada mudou', mudancas };
+  return { msg: mudancas ? mudancas + ' campo(s) alterado(s)' : 'Nada mudou', mudancas, foto: novo.foto || '' };
+}
+
+/** Na alteração: o número não pode pertencer a OUTRO bem (a própria linha pode). */
+function conferirLivre(numero, linhaPropria, rotulo) {
+  const linha = acharLinhaBem(numero);
+  if (linha && linha !== linhaPropria) throw new Error(rotulo + numero + ' já é o nº de patrimônio de outro bem.');
+  if (acharDesincorporado(numero)) throw new Error(rotulo + numero + ' já foi usado num bem desincorporado.');
+  const dono = acharPorAlternativo(numero);
+  if (dono && dono.linha !== linhaPropria) throw new Error(rotulo + numero + ' já é o nº alternativo do bem ' + dono.patrimonio + ' (' + dono.descricao + ').');
 }
 
 function desincorporar(op) {
@@ -259,7 +279,7 @@ function acharPorAlternativo(numero) {
   const achado = sh.getRange(2, col, sh.getLastRow() - 1, 1).createTextFinder(numero).matchEntireCell(true).findNext();
   if (!achado) return null;
   const r = sh.getRange(achado.getRow(), 1, 1, cab.length).getDisplayValues()[0];
-  return { patrimonio: r[0], descricao: r[cab.indexOf('Descrição')] };
+  return { linha: achado.getRow(), patrimonio: r[0], descricao: r[cab.indexOf('Descrição')] };
 }
 
 function acharDesincorporado(patrimonio) {
@@ -401,6 +421,20 @@ function salvarFoto(foto, patrimonio) {
   const nome = patrimonio + '_' + Utilities.formatDate(new Date(), 'GMT', 'yyyyMMdd-HHmmss') + '.jpg';
   const blob = Utilities.newBlob(Utilities.base64Decode(foto.base64), foto.mime || 'image/jpeg', nome);
   return pasta.createFile(blob).getUrl();
+}
+
+/** Devolve a foto do bem (só arquivos da pasta do app) para o app mostrar na ficha. */
+function lerFoto(url) {
+  const m = String(url || '').match(/\/d\/([-\w]{20,})/) || String(url || '').match(/[?&]id=([-\w]{20,})/);
+  if (!m) throw new Error('Link de foto inválido.');
+  const arq = DriveApp.getFileById(m[1]);
+  const pastaId = PropertiesService.getScriptProperties().getProperty('PASTA_FOTOS_ID');
+  let daPasta = false;
+  const pais = arq.getParents();
+  while (pais.hasNext()) if (pais.next().getId() === pastaId) daPasta = true;
+  if (!daPasta) throw new Error('Essa foto não está na pasta do app.');
+  const b = arq.getBlob();
+  return { base64: Utilities.base64Encode(b.getBytes()), mime: b.getContentType() || 'image/jpeg' };
 }
 
 // ───────────────────────── Configuração (rodar uma vez) ─────────────────────────

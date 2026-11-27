@@ -6,6 +6,7 @@ import { recarregarDados } from '../sync.js';
 import { escolher, abrirFolha, topo } from '../componentes.js';
 import { esc, normalizar, toast, botoesLimpar } from '../ui.js';
 import { lerCodigo, lidoPorTexto } from '../leitor.js';
+import { fotoDoBem } from '../foto.js';
 
 export const titulo = 'Pesquisa';
 
@@ -130,6 +131,13 @@ export async function render(el) {
 
   desenharFiltros();
   desenhar();
+  // Voltou da tela Alterar: abre a ficha do bem alterado
+  const ver = new URLSearchParams(location.hash.split('?')[1] || '').get('ver');
+  if (ver) {
+    history.replaceState(null, '', '#/pesquisa');
+    const bem = d.bens.find((b) => chaveNum(b.patrimonio) === chaveNum(ver));
+    if (bem) mostrarBem(bem);
+  }
   // Traz a planilha atualizada (se houver internet) e redesenha
   if (await recarregarDados(30000)) { d = await lerDados(); desenhar(); }
 }
@@ -144,14 +152,27 @@ function mostrarBem(b, lido) {
     ['Situação', b.situacao], ['Doação', b.doacao], ['Localização', b.localizacao],
     ['Cadastrado em', b.cadastradoEm], ['Atualizado em', b.atualizadoEm],
   ].filter(([, v]) => v);
-  const foto = /^https?:\/\//.test(b.foto || '') ? b.foto : '';
+  const link = /^https?:\/\//.test(b.foto || '') ? b.foto : '';
   const dlg = abrirFolha(`${topo(`Nº ${b.patrimonio}`)}
     <div class="ficha">
+      <div class="ficha__foto" ${link ? '' : 'hidden'}><p class="sub">Carregando foto…</p></div>
       ${desinc(b) ? '<p class="selo selo--erro">Desincorporado</p>' : pendente(b) ? '<p class="selo selo--aviso">Aguardando envio para a planilha</p>' : '<p class="selo selo--ok">Ativo</p>'}
       ${pelaAlt ? `<p class="aviso-campo">${icone('alerta')}<span>Você leu a plaqueta antiga (nº alternativo ${esc(b.patrimonioAlt)}).</span></p>` : ''}
       <dl>${linhas.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
-      ${foto ? `<a class="botao botao--sec botao--bloco" href="${esc(foto)}" target="_blank" rel="noopener">${icone('camera')} Ver foto</a>` : ''}
-    </div>`);
+    </div>
+    ${desinc(b) ? '' : `<a class="botao botao--bloco" href="#/alterar?n=${encodeURIComponent(b.patrimonio)}" data-alterar>${icone('editar')} Alterar</a>`}`);
+  dlg.querySelector('[data-alterar]')?.addEventListener('click', () => dlg.close());
+  // Foto logo no alto da ficha (tocar amplia)
+  const caixa = dlg.querySelector('.ficha__foto');
+  fotoDoBem(b).then((url) => {
+    if (!url) return void (caixa.hidden = true);
+    caixa.hidden = false;
+    caixa.innerHTML = `<img src="${url}" alt="Foto do bem ${esc(b.patrimonio)}">`;
+    caixa.onclick = () => caixa.classList.toggle('ficha__foto--cheia');
+  }).catch((err) => {
+    caixa.innerHTML = `<p class="sub">Foto não carregou: ${esc(err.message)}</p>`
+      + `<a class="botao botao--sec botao--bloco" href="${esc(link)}" target="_blank" rel="noopener">${icone('camera')} Abrir no Drive</a>`;
+  });
   dlg.addEventListener('close', () => dlg.remove());
   dlg.showModal();
 }

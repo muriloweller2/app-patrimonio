@@ -1,11 +1,11 @@
 import { icone } from '../icones.js';
 import { db } from '../db.js';
 import { lerDados, situacaoNumero, chaveNum } from '../dados.js';
-import { registrar, recarregarDados, estado } from '../sync.js';
+import { registrar, recarregarDados, estado, alterarBem } from '../sync.js';
 import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
 import { esc, normalizar, toast, botoesLimpar, botaoX } from '../ui.js';
 import { lerCodigo, lidoPorTexto } from '../leitor.js';
-import { prepararFoto } from '../foto.js';
+import { prepararFoto, fotoDoBem } from '../foto.js';
 import { tirarFoto } from '../camera-foto.js';
 import { editarFoto } from '../editor-foto.js';
 
@@ -27,12 +27,36 @@ const texto = (id, rotulo, { obrigatorio = false, modo = '', dica = '', area = f
       : `<input class="entrada" id="${id}" autocomplete="off" ${modo ? `inputmode="${modo}"` : ''} placeholder="${esc(dica)}">`}
   </div>`;
 
-export async function render(el) {
-  const escolha = { grupo: null, subgrupo: null, local: (await db.ler('kv', 'ultimaLocalizacao')) || null, situacao: null };
+// Tela Alterar (#/alterar?n=002756): o mesmo formulário, já preenchido com o bem
+export const alterarTela = {
+  titulo: 'Alterar',
+  render: (el) => render(el, new URLSearchParams(location.hash.split('?')[1] || '').get('n') || ''),
+};
+
+const CAMPOS_TEXTO = ['patrimonio', 'patrimonioAlt', 'descricao', 'marca', 'modelo', 'serie', 'especificacao'];
+
+/** `numeroEdicao` = nº do bem a alterar (sem ele, é incorporação de bem novo). */
+export async function render(el, numeroEdicao = null) {
+  const editando = numeroEdicao !== null;
+  const dados = await lerDados();
+  const original = editando ? dados.bens.find((b) => chaveNum(b.patrimonio) === chaveNum(numeroEdicao)) : null;
+  if (editando && !original) {
+    el.innerHTML = `<h2>Alterar</h2><p class="sub">Bem nº ${esc(numeroEdicao)} não encontrado.</p>
+      <a class="botao botao--sec botao--bloco" href="#/pesquisa">${icone('busca')} Ir para a Pesquisa</a>`;
+    return;
+  }
+  const mesmo = (a, b) => normalizar(a) === normalizar(b);
+  const escolha = editando ? {
+    grupo: original.grupo ? (dados.grupos.find((g) => mesmo(g.nome, original.grupo)) || { nome: original.grupo, codigo: original.grupoCod || '' }) : null,
+    subgrupo: original.subgrupo ? (dados.subgrupos.find((x) => mesmo(x.grupo, original.grupo) && mesmo(x.nome, original.subgrupo))
+      || { grupo: original.grupo, nome: original.subgrupo, codigo: original.subgrupoCod || '' }) : null,
+    local: original.localizacao || null,
+    situacao: original.situacao || null,
+  } : { grupo: null, subgrupo: null, local: (await db.ler('kv', 'ultimaLocalizacao')) || null, situacao: null };
 
   el.innerHTML = `
-    <h2>Incorporar</h2>
-    <p class="sub">Cadastrar um bem novo. <span class="obrig">*</span> obrigatório</p>
+    <h2>${editando ? `Alterar nº ${esc(original.patrimonio)}` : 'Incorporar'}</h2>
+    <p class="sub">${editando ? 'Mude o que precisar e toque em Salvar alterações.' : 'Cadastrar um bem novo.'} <span class="obrig">*</span> obrigatório</p>
 
     <form id="form" class="cartao" novalidate autocomplete="off">
       <div class="campo" data-campo="patrimonio">
@@ -75,6 +99,7 @@ export async function render(el) {
       <div class="campo">
         <span class="rotulo">Foto do bem <small class="dica">opcional</small></span>
         <button type="button" class="botao botao--sec" id="foto">${icone('camera')} Tirar foto</button>
+        <p class="sub" id="foto-nota" hidden></p>
         <div class="foto-previa" id="previa" hidden>
           <img alt="Foto do bem">
           <div class="foto-previa__acoes">
@@ -84,7 +109,8 @@ export async function render(el) {
         </div>
       </div>
 
-      <button class="botao botao--bloco botao--incorporar" type="submit" id="salvar">${icone('mais')} Salvar bem</button>
+      <button class="botao botao--bloco botao--incorporar" type="submit" id="salvar">${editando ? `${icone('ok')} Salvar alterações` : `${icone('mais')} Salvar bem`}</button>
+      ${editando ? '<button class="botao botao--sec botao--bloco" type="button" id="cancelar">Cancelar</button>' : ''}
     </form>
   `;
 
@@ -150,6 +176,7 @@ export async function render(el) {
   });
   // Foto: abre a câmera do celular; a foto é diminuída e mostrada em miniatura
   let foto = null;
+  let fotoMudou = false; // na alteração: só envia foto se trocou ou tirou
   function mostrarFoto() {
     $('previa').hidden = !foto;
     $('foto').innerHTML = `${icone('camera')} ${foto ? 'Trocar foto' : 'Tirar foto'}`;
@@ -162,12 +189,13 @@ export async function render(el) {
       const editado = await editarFoto(arquivo);
       if (!editado) return;
       foto = { ...(await prepararFoto(editado)), blob: editado };
+      fotoMudou = true;
       mostrarFoto();
     } catch { toast('Não consegui usar essa foto', 'erro'); }
   }
   $('foto').onclick = async () => usarFoto(await tirarFoto());
-  $('editar-foto').onclick = () => foto && usarFoto(foto.blob);
-  $('tirar-foto').onclick = () => { foto = null; mostrarFoto(); };
+  $('editar-foto').onclick = async () => foto && usarFoto(foto.blob || await (await fetch(foto.url)).blob());
+  $('tirar-foto').onclick = () => { foto = null; fotoMudou = true; mostrarFoto(); };
 
   // Avisa na hora se o nº já foi incorporado ou desincorporado (confere nos bens e nas desincorporações)
   function avisar(id, s) {
@@ -186,8 +214,10 @@ export async function render(el) {
   }
   // Se o nº parece repetido, confere na planilha na hora (pode ter sido apagado lá)
   async function conferirNumero(id) {
-    let s = situacaoNumero(await lerDados(), valorTexto(id));
-    if (s && await recarregarDados(3000)) s = situacaoNumero(await lerDados(), valorTexto(id));
+    // Na alteração, o próprio bem não conta como repetido
+    const doProprio = (x) => x && editando && x.bem && chaveNum(x.bem.patrimonio) === chaveNum(original.patrimonio) ? null : x;
+    let s = doProprio(situacaoNumero(await lerDados(), valorTexto(id)));
+    if (s && await recarregarDados(3000)) s = doProprio(situacaoNumero(await lerDados(), valorTexto(id)));
     // Os dois campos do mesmo bem não podem ter o mesmo número
     if (!s && id === 'patrimonioAlt' && valorTexto('patrimonioAlt') && chaveNum(valorTexto('patrimonioAlt')) === chaveNum(valorTexto('patrimonio'))) {
       s = { tipo: 'ativo', comoAlt: false, registro: { descricao: 'é igual ao nº de patrimônio acima' } };
@@ -249,6 +279,17 @@ export async function render(el) {
       localizacao: escolha.local,
     };
 
+    if (editando) {
+      bem.foto = original.foto || '';
+      const mudou = fotoMudou || Object.keys(bem).some((k) => String(bem[k] ?? '') !== String(original[k] ?? ''));
+      if (!mudou) { toast('Nada mudou', 'aviso'); return history.back(); }
+      $('salvar').disabled = true;
+      await alterarBem(original.patrimonio, bem, !fotoMudou ? undefined : foto ? { base64: foto.base64, mime: foto.mime } : null);
+      toast(`Nº ${bem.patrimonio} alterado ✓ · aguardando envio em Pendências`, 'ok');
+      location.hash = `#/pesquisa?ver=${encodeURIComponent(bem.patrimonio)}`;
+      return;
+    }
+
     $('salvar').disabled = true;
     await registrar('incorporar', foto ? { bem, foto: { base64: foto.base64, mime: foto.mime } } : { bem });
     await db.gravar('kv', escolha.local, 'ultimaLocalizacao');
@@ -269,4 +310,22 @@ export async function render(el) {
   };
 
   atualizarSeletores();
+
+  if (editando) {
+    CAMPOS_TEXTO.forEach((id) => ($(id).value = original[id] || ''));
+    const doacao = el.querySelector(`input[name="doacao"][value="${original.doacao === 'Sim' ? 'Sim' : 'Não'}"]`);
+    if (doacao) doacao.checked = true;
+    el.querySelectorAll('.entrada').forEach((i) => i.dispatchEvent(new Event('input'))); // mostra os "x" de limpar
+    $('cancelar').onclick = () => history.back();
+    // Foto atual do bem
+    const nota = $('foto-nota');
+    if (/^https?:/.test(original.foto || '')) { nota.hidden = false; nota.textContent = 'Carregando a foto atual…'; }
+    fotoDoBem(original).then((url) => {
+      nota.hidden = true;
+      if (url && !fotoMudou) { foto = { url }; mostrarFoto(); }
+    }).catch((err) => {
+      nota.hidden = false;
+      nota.textContent = `A foto atual não carregou (${err.message}). Ela continua salva, a não ser que você tire outra.`;
+    });
+  }
 }

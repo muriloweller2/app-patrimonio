@@ -2,7 +2,7 @@
 import { db } from './db.js';
 import { chamar } from './api.js';
 import { configurado, redeLiberada } from './config.js';
-import { lerDados, gravarDados, aplicarLocal } from './dados.js';
+import { lerDados, gravarDados, aplicarLocal, chaveNum } from './dados.js';
 
 const SCRIPT_ANTIGO = 'O Apps Script publicado é uma versão ANTIGA. Cole o Codigo.gs novo e crie uma Nova versão da implantação.';
 const ACOES_DE_BEM = ['incorporar', 'alterar', 'desincorporar'];
@@ -22,6 +22,26 @@ export async function registrar(action, dados) {
     });
   }
   await gravarDados(aplicarLocal(await lerDados(), op));
+  avisar();
+  return op;
+}
+
+/**
+ * Alteração de um bem (tela Alterar). `anterior` = nº antes da alteração; `foto` = {base64,mime} se trocou, null se tirou, undefined se não mexeu.
+ * Se o bem ainda nem foi enviado (incorporação na fila), corrige a própria incorporação em vez de criar uma alteração.
+ */
+export async function alterarBem(anterior, bem, foto) {
+  const fila = await db.todos('fila');
+  const inc = fila.find((o) => o.action === 'incorporar' && chaveNum(o.bem?.patrimonio) === chaveNum(anterior));
+  if (foto === null) bem = { ...bem, foto: '' };
+  if (!inc) return registrar('alterar', foto ? { anterior, bem, foto } : { anterior, bem });
+  const op = { ...inc, bem: { ...inc.bem, ...bem }, estado: 'pendente', erro: null };
+  if (foto) op.foto = foto;
+  else if (foto === null) delete op.foto;
+  await db.gravar('fila', op);
+  const h = await db.ler('historico', op.id);
+  if (h) await db.gravar('historico', { ...h, patrimonio: bem.patrimonio, descricao: bem.descricao });
+  await gravarDados(aplicarLocal(await lerDados(), { action: 'alterar', anterior, bem }));
   avisar();
   return op;
 }

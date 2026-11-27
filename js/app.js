@@ -13,6 +13,7 @@ const ROTAS = {
   '': inicio,
   incorporar,
   pesquisa,
+  alterar: incorporar.alterarTela,
   bens: emBreve('Bens', 'etapa 6'),
   desincorporar: emBreve('Desincorporar', 'etapa 7'),
   cadastros,

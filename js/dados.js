@@ -71,7 +71,7 @@ export function aplicarLocal(d, op) {
       d.bens.push({ ...op.bem, status: 'ATIVO' });
       break;
     case 'alterar':
-      Object.assign(bem(op.bem.patrimonio) || {}, op.bem);
+      Object.assign(bem(op.anterior || op.bem.patrimonio) || bem(op.bem.patrimonio) || {}, op.bem); // anterior = trocou o nº
       break;
     case 'desincorporar': {
       const b = bem(op.patrimonio);
