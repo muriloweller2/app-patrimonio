@@ -1,4 +1,4 @@
-const VERSAO_SCRIPT = '2026-11-27';
+const VERSAO_SCRIPT = '2026-11-27b';
 /**
  * App Patrimônio — backend (Google Apps Script vinculado à planilha)
  *
@@ -134,6 +134,7 @@ function incorporar(op) {
   if (!b.descricao) throw new Error('Informe a descrição do bem.');
   if (jaProcessado(ABAS.INC, op.id)) return { msg: 'Já enviado antes', duplicado: true };
   conferirNovo(b.patrimonio);
+  if (b.patrimonioAlt) conferirAlternativo(b.patrimonioAlt, b.patrimonio);
 
   if (op.foto) b.foto = salvarFoto(op.foto, b.patrimonio);
   const m = momento(op.quando);
@@ -236,6 +237,29 @@ function conferirNovo(patrimonio) {
   }
   const des = acharDesincorporado(patrimonio);
   if (des) throw new Error('Patrimônio ' + patrimonio + ' foi desincorporado em ' + des.data + '. Não pode ser incorporado de novo.');
+  const dono = acharPorAlternativo(patrimonio);
+  if (dono) throw new Error('Nº ' + patrimonio + ' já é o nº alternativo do bem ' + dono.patrimonio + ' (' + dono.descricao + ').');
+}
+
+/** Um número só pode pertencer a um bem: o nº alternativo não pode existir como nº normal nem como alternativo de outro bem. */
+function conferirAlternativo(alt, patrimonio) {
+  if (texto(alt) === texto(patrimonio)) throw new Error('O nº alternativo não pode ser igual ao nº de patrimônio.');
+  const linha = acharLinhaBem(alt);
+  if (linha) throw new Error('Nº alternativo ' + alt + ' já é o nº de patrimônio de outro bem.');
+  if (acharDesincorporado(alt)) throw new Error('Nº alternativo ' + alt + ' já foi usado num bem desincorporado.');
+  const dono = acharPorAlternativo(alt);
+  if (dono) throw new Error('Nº alternativo ' + alt + ' já pertence ao bem ' + dono.patrimonio + ' (' + dono.descricao + ').');
+}
+
+function acharPorAlternativo(numero) {
+  const sh = aba(ABAS.BENS);
+  if (sh.getLastRow() < 2) return null;
+  const cab = CABECALHOS[ABAS.BENS];
+  const col = cab.indexOf('Nº Patrimônio Alt.') + 1;
+  const achado = sh.getRange(2, col, sh.getLastRow() - 1, 1).createTextFinder(numero).matchEntireCell(true).findNext();
+  if (!achado) return null;
+  const r = sh.getRange(achado.getRow(), 1, 1, cab.length).getDisplayValues()[0];
+  return { patrimonio: r[0], descricao: r[cab.indexOf('Descrição')] };
 }
 
 function acharDesincorporado(patrimonio) {

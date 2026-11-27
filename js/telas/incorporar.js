@@ -1,6 +1,6 @@
 import { icone } from '../icones.js';
 import { db } from '../db.js';
-import { lerDados, situacaoNumero } from '../dados.js';
+import { lerDados, situacaoNumero, chaveNum } from '../dados.js';
 import { registrar, enviar, situacaoDe, recarregarDados } from '../sync.js';
 import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
 import { esc, normalizar, toast, botoesLimpar, botaoX } from '../ui.js';
@@ -161,34 +161,40 @@ export async function render(el) {
   $('tirar-foto').onclick = () => { foto = null; mostrarFoto(); };
 
   // Avisa na hora se o nº já foi incorporado ou desincorporado (confere nos bens e nas desincorporações)
-  function avisar(id, s, alternativo) {
+  function avisar(id, s) {
     const aviso = $('aviso-' + id);
     aviso.hidden = !s;
     if (!s) return;
     const des = s.tipo === 'desincorporado';
-    aviso.classList.toggle('aviso-campo--erro', des);
+    aviso.classList.add('aviso-campo--erro'); // número repetido sempre impede salvar
     const b = s.bem || s.registro;
     const quando = s.registro?.data || (des && s.bem?.atualizadoEm?.slice(0, 10)) || '';
-    const onde = alternativo ? 'Já usado como nº alternativo' : des ? 'Desincorporado' : 'Já incorporado';
+    const onde = s.comoAlt
+      ? `Já é o nº alternativo do bem nº ${esc(s.bem.patrimonio)}${des ? ' (desincorporado)' : ''}`
+      : des ? 'Desincorporado' : 'Já incorporado';
     aviso.innerHTML = `${icone('alerta')}<span>${onde}${quando ? ` em ${esc(quando)}` : ''}: <b>${esc(b.descricao || '')}</b>`
-      + `${s.bem?.patrimonio && alternativo ? ` (nº ${esc(s.bem.patrimonio)})` : ''}${s.bem?.localizacao ? ` · ${esc(s.bem.localizacao)}` : ''}</span>`;
+      + `${s.bem?.localizacao ? ` · ${esc(s.bem.localizacao)}` : ''}</span>`;
   }
   // Se o nº parece repetido, confere na planilha na hora (pode ter sido apagado lá)
-  async function conferirNumero(id, campo, alternativo) {
-    let s = situacaoNumero(await lerDados(), valorTexto(id), campo);
-    if (s && await recarregarDados(3000)) s = situacaoNumero(await lerDados(), valorTexto(id), campo);
-    avisar(id, s, alternativo);
+  async function conferirNumero(id) {
+    let s = situacaoNumero(await lerDados(), valorTexto(id));
+    if (s && await recarregarDados(3000)) s = situacaoNumero(await lerDados(), valorTexto(id));
+    // Os dois campos do mesmo bem não podem ter o mesmo número
+    if (!s && id === 'patrimonioAlt' && valorTexto('patrimonioAlt') && chaveNum(valorTexto('patrimonioAlt')) === chaveNum(valorTexto('patrimonio'))) {
+      s = { tipo: 'ativo', comoAlt: false, registro: { descricao: 'é igual ao nº de patrimônio acima' } };
+    }
+    avisar(id, s);
     return !s;
   }
-  const conferirPatrimonio = () => conferirNumero('patrimonio', 'patrimonio', false);
-  const conferirAlternativo = () => conferirNumero('patrimonioAlt', 'patrimonioAlt', true);
+  const conferirPatrimonio = () => conferirNumero('patrimonio');
+  const conferirAlternativo = () => conferirNumero('patrimonioAlt');
   // Ao abrir a tela, já traz a planilha atualizada
   recarregarDados().then((ok) => {
     if (!ok) return;
     if (valorTexto('patrimonio')) conferirPatrimonio();
     if (valorTexto('patrimonioAlt')) conferirAlternativo();
   });
-  $('patrimonio').addEventListener('input', () => { marcarOk('patrimonio'); conferirPatrimonio(); });
+  $('patrimonio').addEventListener('input', () => { marcarOk('patrimonio'); conferirPatrimonio(); if (valorTexto('patrimonioAlt')) conferirAlternativo(); });
   $('patrimonioAlt').addEventListener('input', conferirAlternativo);
   $('descricao').addEventListener('input', () => marcarOk('descricao'));
 
@@ -211,6 +217,10 @@ export async function render(el) {
     if (!(await conferirPatrimonio())) {
       $('patrimonio').scrollIntoView({ behavior: 'smooth', block: 'center' });
       return toast('Esse nº de patrimônio já existe. Veja o aviso abaixo do campo.', 'erro');
+    }
+    if (valorTexto('patrimonioAlt') && !(await conferirAlternativo())) {
+      $('patrimonioAlt').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return toast('Esse nº alternativo já pertence a outro bem. Veja o aviso abaixo do campo.', 'erro');
     }
 
     const bem = {

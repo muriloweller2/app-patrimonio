@@ -111,3 +111,6 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
   `aba()` cria/acerta aba de cadastro faltando, renomear/excluir repetidos não dão erro. App: botão "Tentar de novo os N recusados",
   opção em Ajustes "Enviar usando dados móveis?" (`redeLiberada` em config.js, via `navigator.connection.type`; iPhone não informa → sempre envia;
   "Enviar agora" ignora a opção). OCR feito (2026-11-27): `js/ocr.js` + `vendor/tesseract/` (tesseract.js 5.1.1, core lstm simd/não-simd, eng best_int ~7 MB no 1º uso; SW guarda em cache próprio `patrimonio-vendor-1`, cache-first). No leitor: começa a carregar ao abrir, lê o recorte da mira após 3 s sem código de barras (na hora se não há BarcodeDetector → iPhone passa a funcionar), só dígitos, aceita 6 dígitos iguais em 2 leituras seguidas; toast pede para conferir. **Aguardando teste real.**
+- Nº único (2026-11-27, script `2026-11-27b`): um número só pertence a um bem, como nº normal OU alternativo.
+  App `situacaoNumero(d, numero)` procura em patrimonio, patrimonioAlt e desincorporados (devolve `comoAlt`); os dois campos avisam em vermelho e bloqueiam salvar; alt igual ao nº normal também bloqueia.
+  Backend: `conferirNovo` olha a coluna Alt; `conferirAlternativo` confere o alt do bem novo.

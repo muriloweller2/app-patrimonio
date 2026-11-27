@@ -7,15 +7,21 @@ const vazio = () => ({ bens: [], grupos: [], subgrupos: [], locais: [], situacoe
 /** "001733" e "1733" contam como o mesmo número. */
 export const chaveNum = (v) => String(v ?? '').trim().replace(/^0+(?=\d)/, '').toLowerCase();
 
-/** Procura o nº nos bens e nos desincorporados. Devolve { tipo: 'ativo'|'desincorporado', bem|registro } ou null. */
-export function situacaoNumero(d, numero, campo = 'patrimonio') {
+/**
+ * Procura o nº em QUALQUER lugar: nº de patrimônio dos bens, nº alternativo dos bens e desincorporados.
+ * Um número só pode pertencer a um bem, seja como nº normal ou como alternativo.
+ * Devolve { tipo: 'ativo'|'desincorporado', comoAlt, bem|registro } ou null.
+ */
+export function situacaoNumero(d, numero) {
   const n = chaveNum(numero);
   if (!n) return null;
-  const bem = d.bens.find((b) => chaveNum(b[campo]) === n);
-  if (bem) return { tipo: bem.status === 'DESINCORPORADO' ? 'desincorporado' : 'ativo', bem };
-  if (campo !== 'patrimonio') return null;
+  const tipo = (b) => (b.status === 'DESINCORPORADO' ? 'desincorporado' : 'ativo');
+  let bem = d.bens.find((b) => chaveNum(b.patrimonio) === n);
+  if (bem) return { tipo: tipo(bem), comoAlt: false, bem };
+  bem = d.bens.find((b) => chaveNum(b.patrimonioAlt) === n);
+  if (bem) return { tipo: tipo(bem), comoAlt: true, bem };
   const reg = d.desincorporados.find((x) => chaveNum(x.patrimonio) === n);
-  return reg ? { tipo: 'desincorporado', registro: reg } : null;
+  return reg ? { tipo: 'desincorporado', comoAlt: false, registro: reg } : null;
 }
 
 export async function lerDados() {
