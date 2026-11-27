@@ -2,6 +2,7 @@
 // Uso: const n = await lerCodigo('Nº de Patrimônio'); // null se cancelar
 import { icone } from './icones.js';
 import { esc } from './ui.js';
+import { criarOcr, recorteDaMira } from './ocr.js';
 
 // Plaquetas do hospital (nova prata e antiga verde) têm sempre 6 dígitos, ex.: 001733.
 // Leituras de outro tamanho são pedaços do código mal lidos e são ignoradas.
@@ -16,10 +17,17 @@ const REGIOES_VIDEO = [1, 0.6, 0.4];
 const REGIOES_FOTO = [1, 0.55, 0.3];
 // De quanto em quanto tempo tira uma foto em resolução máxima (bem mais nítida que o vídeo)
 const INTERVALO_FOTO = 1200;
+// Plano B: depois de ESPERA_OCR ms sem ler o código de barras, tenta ler o número impresso (OCR).
+// Sem leitor de código de barras (ex.: iPhone), o OCR começa na hora.
+const ESPERA_OCR = 3000;
 
 const PREFERIDOS = ['itf', 'code_39', 'code_128', 'codabar', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e'];
 
-export const leitorDisponivel = () => 'BarcodeDetector' in window && !!navigator.mediaDevices?.getUserMedia;
+export const leitorDisponivel = () => !!navigator.mediaDevices?.getUserMedia;
+
+/** true se a última leitura veio do número impresso (OCR), que merece conferência. */
+let porTexto = false;
+export const lidoPorTexto = () => porTexto;
 
 let detector = null;
 async function obterDetector() {
@@ -57,8 +65,9 @@ async function camerasTraseiras() {
 }
 
 export async function lerCodigo(titulo = 'Ler código') {
-  if (!leitorDisponivel()) throw new Error('Este navegador não lê código de barras. Use o Chrome no Android.');
-  const det = await obterDetector();
+  if (!leitorDisponivel()) throw new Error('Este navegador não permite usar a câmera.');
+  const det = 'BarcodeDetector' in window ? await obterDetector().catch(() => null) : null;
+  porTexto = false;
 
   const dlg = document.createElement('dialog');
   dlg.className = 'leitor';
@@ -72,7 +81,7 @@ export async function lerCodigo(titulo = 'Ler código') {
     </div>
     <div class="leitor__base">
       <button type="button" class="leitor__btn leitor__zoom" data-zoom hidden aria-label="Zoom"></button>
-      <p>Aponte para a plaqueta<br><small>Toque na imagem para focar</small></p>
+      <p>Aponte para a plaqueta<br><small data-dica>Toque na imagem para focar</small></p>
       <button type="button" class="leitor__btn" data-luz hidden aria-label="Lanterna">${icone('luz')}</button>
     </div>`;
   const video = dlg.querySelector('video');
@@ -151,15 +160,44 @@ export async function lerCodigo(titulo = 'Ler código') {
 
   const quadroVideo = document.createElement('canvas');
   const quadroFoto = document.createElement('canvas');
+  const quadroTexto = document.createElement('canvas');
+  const mira = dlg.querySelector('.leitor__mira span');
+  const dica = dlg.querySelector('[data-dica]');
 
   return new Promise((resolve) => {
     let ativo = true;
     const leituras = [];
     let vez = 0, fotografando = false, ultimaFoto = 0, falhasFoto = 0;
+    const inicio = performance.now();
+
+    // OCR: já começa a carregar (leva alguns segundos), mas só lê depois da espera
+    let ocr = null, lendoTexto = false, textoAnterior = null;
+    dica.textContent = det ? 'Toque na imagem para focar' : 'Preparando leitura do número…';
+    criarOcr().then((o) => {
+      if (!ativo) return o.fechar();
+      ocr = o;
+      if (!det) dica.textContent = 'Deixe o número impresso dentro do quadro';
+    }).catch(() => { if (!det) dica.textContent = 'Não consegui preparar a leitura do número.'; });
+
+    async function lerTexto() {
+      if (!ocr || lendoTexto || !ativo || video.readyState < 2 || !video.videoWidth) return;
+      if (det && performance.now() - inicio < ESPERA_OCR) return;
+      lendoTexto = true;
+      if (det) dica.textContent = 'Lendo também o número impresso…';
+      try {
+        const nums = await ocr.ler(recorteDaMira(quadroTexto, video, mira));
+        const atual = nums.length === 1 ? nums[0] : null; // dois números diferentes no quadro = não confia
+        // Mesmo número em duas leituras seguidas = aceita
+        if (atual && atual === textoAnterior) { porTexto = true; aceitar(atual); }
+        textoAnterior = atual;
+      } catch { /* quadro ruim */ }
+      finally { lendoTexto = false; }
+    }
 
     function terminar(valor) {
       if (!ativo) return;
       ativo = false;
+      ocr?.fechar();
       stream.getTracks().forEach((t) => t.stop());
       dlg.close();
       dlg.remove();
@@ -181,7 +219,7 @@ export async function lerCodigo(titulo = 'Ler código') {
 
     // Foto em resolução máxima: com a plaqueta inteira na tela o código ainda fica nítido
     async function analisarFoto() {
-      if (!captura || fotografando || !ativo || performance.now() - ultimaFoto < INTERVALO_FOTO) return;
+      if (!det || !captura || fotografando || !ativo || performance.now() - ultimaFoto < INTERVALO_FOTO) return;
       fotografando = true;
       try {
         const blob = await captura.takePhoto(luz ? {} : { fillLightMode: 'off' });
@@ -207,7 +245,8 @@ export async function lerCodigo(titulo = 'Ler código') {
     async function procurar() {
       if (!ativo) return;
       analisarFoto();
-      if (video.readyState >= 2 && video.videoWidth) {
+      lerTexto();
+      if (det && video.readyState >= 2 && video.videoWidth) {
         try {
           const f = REGIOES_VIDEO[vez++ % REGIOES_VIDEO.length];
           const valor = (await lerValores(det, recorte(quadroVideo, video, video.videoWidth, video.videoHeight, f)))[0];

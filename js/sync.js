@@ -1,12 +1,14 @@
 // Fila offline: tudo é salvo primeiro no celular e enviado à planilha quando há internet.
 import { db } from './db.js';
 import { chamar } from './api.js';
-import { configurado } from './config.js';
+import { configurado, redeLiberada } from './config.js';
 import { lerDados, gravarDados, aplicarLocal } from './dados.js';
 
+const SCRIPT_ANTIGO = 'O Apps Script publicado é uma versão ANTIGA. Cole o Codigo.gs novo e crie uma Nova versão da implantação.';
 const ACOES_DE_BEM = ['incorporar', 'alterar', 'desincorporar'];
 let enviando = false;
 let ultimoErro = null;
+let aguardandoWifi = false;
 
 /** Guarda a operação na fila e já aplica na cópia local. Não envia: chame enviar() depois. */
 export async function registrar(action, dados) {
@@ -40,7 +42,7 @@ async function baixarDados() {
 /** Busca agora os dados atuais da planilha (ex.: um bem apagado direto na planilha libera o nº na hora). */
 let ultimaBaixa = 0;
 export async function recarregarDados(minimoMs = 0) {
-  if (!navigator.onLine || !configurado() || Date.now() - ultimaBaixa < minimoMs) return false;
+  if (!redeLiberada() || !configurado() || Date.now() - ultimaBaixa < minimoMs) return false;
   ultimaBaixa = Date.now();
   try {
     const ok = await baixarDados();
@@ -49,9 +51,13 @@ export async function recarregarDados(minimoMs = 0) {
   } catch { return false; }
 }
 
-export async function enviar() {
-  if (enviando || !navigator.onLine || !configurado()) return;
+/** `manual` = botão "Enviar agora": envia mesmo com a opção de dados móveis desligada. */
+export async function enviar(manual = false) {
+  if (enviando || !configurado()) return;
+  aguardandoWifi = navigator.onLine && !redeLiberada(manual);
+  if (!redeLiberada(manual)) return avisar();
   enviando = true;
+  let versaoAntiga = false;
   avisar();
   try {
     const fila = (await db.todos('fila')).filter((o) => o.estado !== 'erro').sort((a, b) => a.criado - b.criado);
@@ -59,6 +65,7 @@ export async function enviar() {
       const ops = pacote.map(({ estado, criado, erro, ...o }) => o);
       const r = await chamar('lote', { ops });
       if (!r.ok) throw new Error(r.erro);
+      if (!r.versao) versaoAntiga = true;
       for (const res of r.resultados) {
         const op = pacote.find((o) => o.id === res.id);
         if (!op) continue;
@@ -68,7 +75,7 @@ export async function enviar() {
       avisar();
     }
     await baixarDados();
-    ultimoErro = null;
+    ultimoErro = versaoAntiga ? SCRIPT_ANTIGO : null;
   } catch (err) {
     ultimoErro = err.message;
   } finally {
@@ -84,6 +91,7 @@ export async function estado() {
     erros: fila.filter((o) => o.estado === 'erro').length,
     enviando,
     ultimoErro,
+    aguardandoWifi,
   };
 }
 
@@ -102,7 +110,15 @@ export async function descartar(id) {
 export async function tentarDeNovo(id) {
   const op = await db.ler('fila', id);
   if (op) await db.gravar('fila', { ...op, estado: 'pendente', erro: null });
-  await enviar();
+  await enviar(true);
+}
+
+/** Volta todos os itens recusados para a fila e envia (ex.: depois de atualizar o Apps Script). */
+export async function tentarTodos() {
+  for (const op of await db.todos('fila')) {
+    if (op.estado === 'erro') await db.gravar('fila', { ...op, estado: 'pendente', erro: null });
+  }
+  await enviar(true);
 }
 
 /** Divide a fila em pacotes com no máximo 4 fotos (fotos demoram para subir ao Drive). */
@@ -124,7 +140,9 @@ function avisar() {
 
 /** Liga o envio automático: ao abrir, ao voltar a internet, ao voltar para o app e a cada minuto. */
 export function iniciarSync() {
-  window.addEventListener('online', enviar);
+  window.addEventListener('online', () => enviar());
+  // Trocou de rede (ex.: chegou no Wi-Fi): tenta enviar
+  navigator.connection?.addEventListener?.('change', () => enviar());
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && enviar());
   setInterval(async () => (await estado()).pendentes && enviar(), 60000);
   enviar();

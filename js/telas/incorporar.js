@@ -4,7 +4,7 @@ import { lerDados, situacaoNumero } from '../dados.js';
 import { registrar, enviar, situacaoDe, recarregarDados } from '../sync.js';
 import { escolherGrupo, escolherSubgrupo, locais, situacoes, rotuloCod } from '../cadastros.js';
 import { esc, normalizar, toast, botoesLimpar, botaoX } from '../ui.js';
-import { lerCodigo } from '../leitor.js';
+import { lerCodigo, lidoPorTexto } from '../leitor.js';
 import { prepararFoto } from '../foto.js';
 
 export const titulo = 'Incorporar';
@@ -140,7 +140,7 @@ export async function render(el) {
         if (!n) return;
         $(id).value = n;
         $(id).dispatchEvent(new Event('input'));
-        toast(`Lido: ${n}`, 'ok');
+        toast(lidoPorTexto() ? `Lido pelo número impresso: ${n}. Confira!` : `Lido: ${n}`, 'ok');
       } catch (e) { toast(e.message, 'erro'); }
     };
   });

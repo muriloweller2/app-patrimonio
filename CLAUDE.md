@@ -97,7 +97,7 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
   (`CONFIRMACOES`), câmera 1920x1080 e foco contínuo. Zeros sumiam na planilha → Codigo.gs grava todo texto com apóstrofo (`fixo`).
   Ajuste 2 (2026-11-26, lento/foco/distância): zoom inicial 2x + botão 1x/2x/3x, toque para focar (pointsOfInterest),
   recorte central no canvas, leitura a cada quadro (requestAnimationFrame), aceita 3 iguais sem divergência nas últimas 6,
-  mira maior (plaqueta inteira). Ajuste 3: rodízio de regiões (imagem toda, recorte 60% e 40% em resolução cheia), câmera 2560x1440. Ajuste 4: foto automática em resolução máxima (ImageCapture.takePhoto) a cada 1,2 s analisada em recortes (2 recortes iguais = aceita), botão L1/L2 troca lente traseira (macro), mira menor. OCR do número impresso: proposto (Tesseract.js local, só como plano B) — **aguardando decisão**.
+  mira maior (plaqueta inteira). Ajuste 3: rodízio de regiões (imagem toda, recorte 60% e 40% em resolução cheia), câmera 2560x1440. Ajuste 4: foto automática em resolução máxima (ImageCapture.takePhoto) a cada 1,2 s analisada em recortes (2 recortes iguais = aceita), botão L1/L2 troca lente traseira (macro), mira menor. OCR do número impresso: aprovado em 2026-11-27 (ver abaixo).
 - Etapa 5 (2026-11-26): `js/foto.js` diminui a foto (1280px, JPEG 0.72) → vai na op `incorporar` como `foto {base64,mime}`
   e fica na fila offline. `sync.js` envia em pacotes de até 4 fotos; timeout da API 45 s. Apps Script não mudou
   (salvarFoto já existia: pasta "Patrimônio - Fotos" no Drive, link na coluna Foto). **Aguardando teste real.**
@@ -105,3 +105,9 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
   (backend `conferirNovo`/`acharDesincorporado`; app `situacaoNumero` em dados.js avisa ao digitar, compara sem zeros à esquerda;
   `dados` agora traz `desincorporados`). Teste real revelou que o Apps Script publicado era o da etapa 1:
   **toda mudança em Codigo.gs exige o usuário colar o código e criar Nova versão da implantação.**
+- Correção de envio (2026-11-27): cadastros recusados em Pendências. Causa provável: Apps Script publicado = etapa 1
+  (salvarGrupo esperava `codigo` como chave → "Preencha o nome."; sem `salvarSituacao`) e/ou Testar não salvava a URL testada.
+  Codigo.gs `2026-11-27`: sempre responde JSON (try/catch), tryLock, `lote` devolve `versao` (app avisa script antigo),
+  `aba()` cria/acerta aba de cadastro faltando, renomear/excluir repetidos não dão erro. App: botão "Tentar de novo os N recusados",
+  opção em Ajustes "Enviar usando dados móveis?" (`redeLiberada` em config.js, via `navigator.connection.type`; iPhone não informa → sempre envia;
+  "Enviar agora" ignora a opção). OCR feito (2026-11-27): `js/ocr.js` + `vendor/tesseract/` (tesseract.js 5.1.1, core lstm simd/não-simd, eng best_int ~7 MB no 1º uso; SW guarda em cache próprio `patrimonio-vendor-1`, cache-first). No leitor: começa a carregar ao abrir, lê o recorte da mira após 3 s sem código de barras (na hora se não há BarcodeDetector → iPhone passa a funcionar), só dígitos, aceita 6 dígitos iguais em 2 leituras seguidas; toast pede para conferir. **Aguardando teste real.**

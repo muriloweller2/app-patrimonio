@@ -1,4 +1,4 @@
-const VERSAO_SCRIPT = '2026-11-26';
+const VERSAO_SCRIPT = '2026-11-27';
 /**
  * App Patrimônio — backend (Google Apps Script vinculado à planilha)
  *
@@ -54,7 +54,11 @@ const CABECALHOS = {
 // ───────────────────────── Entrada HTTP ─────────────────────────
 
 function doGet(e) {
-  return responder(processar((e && e.parameter) || {}));
+  try {
+    return responder(processar((e && e.parameter) || {}));
+  } catch (err) {
+    return responder({ ok: false, erro: 'Erro no script: ' + err.message });
+  }
 }
 
 function doPost(e) {
@@ -64,7 +68,12 @@ function doPost(e) {
   } catch (err) {
     return responder({ ok: false, erro: 'Requisição inválida (JSON).' });
   }
-  return responder(processar(req));
+  try {
+    return responder(processar(req));
+  } catch (err) {
+    // Nunca devolve página de erro HTML: o app sempre recebe JSON e mantém os itens na fila
+    return responder({ ok: false, erro: 'Erro no script: ' + err.message });
+  }
 }
 
 function responder(obj) {
@@ -76,7 +85,7 @@ function processar(req) {
   if (!token || req.token !== token) return { ok: false, erro: 'Token inválido.' };
 
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
+  if (!lock.tryLock(20000)) return { ok: false, erro: 'Planilha ocupada. O app tenta de novo sozinho.', versao: VERSAO_SCRIPT };
   try {
     const ops = req.action === 'lote' ? (req.ops || []) : [req];
     const resultados = ops.map(executarSeguro);
@@ -84,7 +93,7 @@ function processar(req) {
     if (ops.some(o => ['incorporar', 'alterar', 'desincorporar'].includes(o.action))) {
       try { atualizarVisoes(planilha()); } catch (err) { /* não impede o envio */ }
     }
-    return req.action === 'lote' ? { ok: true, resultados } : resultados[0];
+    return req.action === 'lote' ? { ok: true, versao: VERSAO_SCRIPT, resultados } : resultados[0];
   } finally {
     lock.releaseLock();
   }
@@ -243,8 +252,10 @@ function salvarAux(nome, nChave, valores, anterior) {
   valores = valores.map(texto);
   if (valores.slice(0, nChave).some(v => !v)) throw new Error('Preencha o nome.');
   const chaveNova = valores.slice(0, nChave);
-  const linhaAntiga = anterior ? acharLinhaAux(nome, anterior) : 0;
+  let linhaAntiga = anterior ? acharLinhaAux(nome, anterior) : 0;
   const linhaExistente = acharLinhaAux(nome, chaveNova);
+  // Renomear: se o nome antigo não existe mais e o novo já existe, é reenvio de algo que já deu certo
+  if (anterior && !linhaAntiga && linhaExistente) linhaAntiga = linhaExistente;
   if (linhaExistente && linhaExistente !== linhaAntiga && anterior) throw new Error('Já existe um cadastro com esse nome.');
 
   const sh = aba(nome);
@@ -257,7 +268,7 @@ function salvarAux(nome, nChave, valores, anterior) {
 
 function excluirAux(nome, chave) {
   const linha = acharLinhaAux(nome, chave);
-  if (!linha) throw new Error('Cadastro não encontrado.');
+  if (!linha) return { msg: 'Já não existia' }; // reenvio ou apagado direto na planilha: nada a fazer
   aba(nome).deleteRow(linha);
   return { msg: 'Excluído' };
 }
@@ -278,9 +289,23 @@ function planilha() {
   return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
 }
 
+/** Devolve a aba; se faltar (ou estiver vazia com cabeçalho antigo), cria/acerta sozinha. */
 function aba(nome) {
-  const sh = planilha().getSheetByName(nome);
-  if (!sh) throw new Error('Aba "' + nome + '" não existe. Rode configurarPlanilha.');
+  const ss = planilha();
+  let sh = ss.getSheetByName(nome);
+  const cab = CABECALHOS[nome];
+  if (!sh) {
+    if (!cab) throw new Error('Aba "' + nome + '" não existe. Rode configurarPlanilha.');
+    sh = ss.insertSheet(nome);
+    if ([ABAS.GRUPOS, ABAS.SUBGRUPOS, ABAS.LOCAIS, ABAS.SITUACOES].includes(nome)) sh.hideSheet();
+  }
+  if (cab && sh.getLastRow() <= 1) {
+    const atual = sh.getRange(1, 1, 1, cab.length).getDisplayValues()[0];
+    if (atual.join('|') !== cab.join('|')) {
+      sh.getRange(1, 1, 1, cab.length).setValues([cab]).setFontWeight('bold').setBackground('#1f4e5f').setFontColor('#ffffff');
+      sh.setFrozenRows(1);
+    }
+  }
   return sh;
 }
 

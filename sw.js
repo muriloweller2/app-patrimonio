@@ -1,6 +1,7 @@
 // Service worker: deixa o app abrir sem internet.
 // Estratégia: tenta a rede (versão mais nova), e se falhar ou demorar usa o cache.
-const CACHE = 'patrimonio-v19';
+const CACHE = 'patrimonio-v22';
+const VENDOR = 'patrimonio-vendor-1'; // separado: não é apagado a cada versão do app
 const ARQUIVOS = [
   './',
   'index.html',
@@ -18,6 +19,7 @@ const ARQUIVOS = [
   'js/cadastros.js',
   'js/leitor.js',
   'js/foto.js',
+  'js/ocr.js',
   'js/telas/inicio.js',
   'js/telas/ajustes.js',
   'js/telas/em-breve.js',
@@ -36,7 +38,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((nomes) => Promise.all(nomes.filter((n) => n !== CACHE).map((n) => caches.delete(n))))
+      .then((nomes) => Promise.all(nomes.filter((n) => n !== CACHE && n !== VENDOR).map((n) => caches.delete(n))))
       .then(() => self.clients.claim())
   );
 });
@@ -44,6 +46,12 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return; // API do Google passa direto
+
+  // Arquivos grandes do OCR (vendor/): nunca mudam; usa o guardado e só baixa se não tiver (sem limite de tempo)
+  if (new URL(req.url).pathname.includes('/vendor/')) {
+    e.respondWith(caches.open(VENDOR).then(async (c) => (await c.match(req)) || fetch(req).then((r) => { if (r.ok) c.put(req, r.clone()); return r; })));
+    return;
+  }
 
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
