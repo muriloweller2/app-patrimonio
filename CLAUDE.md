@@ -140,3 +140,9 @@ Ações: `ping`, `dados`, `incorporar {id,quando,bem,foto?}`, `alterar {id,quand
 - 2026-11-27 (Codigo.gs `2026-11-27e`): célula da foto mostra **"FOTO" com link** (rich text; `mascararFotos`), em Bens, Incorporações,
   Alterações, Consulta e Por Setor. Leitura do endereço pelo link: `linhasBens`/`urlDaCelula` (lerDados, alterar, Consulta, Por Setor).
   `migrarFotos()` mascara as fotos antigas uma vez (flag `MIGRACAO_FOTO=feito`).
+- 2026-11-27 (Codigo.gs `2026-11-27f`): **aba Bens agrupada por setor** (`organizarBens`): linha 2 = "Ordenar por" (B2: Descrição/Grupo/Subgrupo,
+  onEdit reorganiza), setores A→Z com título amarelo, bens, linha amarela e linha em branco. Reescrita após cada envio de bens
+  (lê a própria aba, então edição manual nas linhas de bem é mantida). `linhasBens` pula linhas que não são bem (sem Status).
+  **Desincorporação tira a linha de Bens** e grava todos os campos em Desincorporações ([Data, Hora, ...ROTULOS, Lançado, ID]);
+  `lerDados` devolve esses como bens DESINCORPORADO para a Pesquisa. `migrarDesincorporados()` (flag `MIGRACAO_DES`) converte a aba antiga.
+  Testado com simulação do Sheets em Node (scratchpad mock.js/teste_bens.js), não na planilha real.

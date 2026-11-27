@@ -1,4 +1,4 @@
-const VERSAO_SCRIPT = '2026-11-27e';
+const VERSAO_SCRIPT = '2026-11-27f';
 /**
  * App Patrimônio — backend (Google Apps Script vinculado à planilha)
  *
@@ -43,7 +43,7 @@ const CABECALHOS = {
   [ABAS.BENS]: [...ROTULOS, 'Status', 'Cadastrado em', 'Atualizado em'],
   [ABAS.INC]: ['Data', 'Hora', ...ROTULOS, LANCADO, 'ID'],
   [ABAS.ALT]: ['Data', 'Hora', 'Nº Patrimônio', 'Descrição', 'Campo', 'Valor anterior', 'Novo valor', LANCADO, 'ID'],
-  [ABAS.DES]: ['Data', 'Hora', 'Nº Patrimônio', 'Descrição', LANCADO, 'ID'],
+  [ABAS.DES]: ['Data', 'Hora', ...ROTULOS, LANCADO, 'ID'],
   [ABAS.GRUPOS]: ['Nome'],
   [ABAS.SUBGRUPOS]: ['Grupo', 'Nome'],
   [ABAS.LOCAIS]: ['Nome'],
@@ -91,13 +91,15 @@ function processar(req) {
   try {
     migrarPlanilha();
     migrarFotos();
+    migrarDesincorporados();
     const ops = req.action === 'lote' ? (req.ops || []) : [req];
     const resultados = ops.map(executarSeguro);
     // Se mexeu em bens, atualiza as abas Consulta e Por Setor e acerta a largura das colunas
     if (ops.some(o => ['incorporar', 'alterar', 'desincorporar'].includes(o.action))) {
       try {
+        organizarBens(planilha());
         atualizarVisoes(planilha());
-        [ABAS.BENS, ABAS.INC, ABAS.ALT, ABAS.DES].forEach(n => ajustarLarguras(aba(n)));
+        [ABAS.INC, ABAS.ALT, ABAS.DES].forEach(n => ajustarLarguras(aba(n)));
       } catch (err) { /* não impede o envio */ }
     }
     return req.action === 'lote' ? { ok: true, versao: VERSAO_SCRIPT, resultados } : resultados[0];
@@ -208,24 +210,18 @@ function desincorporar(op) {
   if (jaProcessado(ABAS.DES, op.id)) return { msg: 'Já enviado antes', duplicado: true };
 
   const m = momento(op.quando);
-  let descricao = texto(op.descricao);
+  const iDesc = CAMPOS.findIndex(c => c[0] === 'descricao');
+  const des = acharDesincorporado(patrimonio);
+  if (des) throw new Error('Patrimônio ' + patrimonio + ' já foi desincorporado em ' + des.data + '.');
   const linha = acharLinhaBem(patrimonio);
-  if (linha) {
-    const sh = aba(ABAS.BENS);
-    const cab = CABECALHOS[ABAS.BENS];
-    const status = sh.getRange(linha, cab.indexOf('Status') + 1);
-    if (status.getValue() === 'DESINCORPORADO') throw new Error('Patrimônio ' + patrimonio + ' já foi desincorporado.');
-    if (!descricao) descricao = sh.getRange(linha, cab.indexOf('Descrição') + 1).getDisplayValue();
-    status.setValue('DESINCORPORADO');
-    sh.getRange(linha, cab.length).setValue(m.dataHora);
-  }
-  else {
-    const des = acharDesincorporado(patrimonio);
-    if (des) throw new Error('Patrimônio ' + patrimonio + ' já foi desincorporado em ' + des.data + '.');
-  }
-  if (!descricao) throw new Error('Informe a descrição do bem.');
+  const sh = aba(ABAS.BENS);
+  // Bem da aba Bens: leva todas as informações; bem antigo (só do Wareline): nº e descrição
+  const valores = linha ? valoresDoBem(sh, linha) : CAMPOS.map(c => (c[0] === 'patrimonio' ? patrimonio : ''));
+  if (!valores[iDesc]) valores[iDesc] = texto(op.descricao);
+  if (!valores[iDesc]) throw new Error('Informe a descrição do bem.');
 
-  registrar(ABAS.DES, [m.data, m.hora, patrimonio, descricao, false, op.id || '']);
+  registrar(ABAS.DES, [m.data, m.hora, ...valores, false, op.id || '']);
+  if (linha) sh.deleteRow(linha); // sai da aba Bens (a aba é reorganizada no fim do envio)
   return { msg: 'Desincorporado' };
 }
 
@@ -235,20 +231,32 @@ function lerDados() {
     return sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getDisplayValues();
   };
   const cabBens = CABECALHOS[ABAS.BENS];
+  const iDesc = CAMPOS.findIndex(c => c[0] === 'descricao');
+  const ativos = linhasBens(planilha()).map(r => {
+    const o = {};
+    CAMPOS.forEach(([chave], i) => (o[chave] = r[i]));
+    o.status = r[cabBens.indexOf('Status')];
+    o.cadastradoEm = r[cabBens.indexOf('Cadastrado em')];
+    o.atualizadoEm = r[cabBens.indexOf('Atualizado em')];
+    return o;
+  });
+  // Desincorporados (com todas as informações) também aparecem na Pesquisa do app
+  const des = linhasComFoto(aba(ABAS.DES));
+  const jaTem = new Set(ativos.map(b => chaveNum(b.patrimonio)));
+  const baixados = des.filter(r => r[2] && !jaTem.has(chaveNum(r[2]))).map(r => {
+    const o = {};
+    CAMPOS.forEach(([chave], i) => (o[chave] = r[i + 2]));
+    o.status = 'DESINCORPORADO';
+    o.atualizadoEm = r[0] + ' ' + r[1];
+    return o;
+  });
   return {
-    bens: linhasBens(planilha()).map(r => {
-      const o = {};
-      CAMPOS.forEach(([chave], i) => (o[chave] = r[i]));
-      o.status = r[cabBens.indexOf('Status')];
-      o.cadastradoEm = r[cabBens.indexOf('Cadastrado em')];
-      o.atualizadoEm = r[cabBens.indexOf('Atualizado em')];
-      return o;
-    }),
+    bens: ativos.concat(baixados),
     grupos: linhas(ABAS.GRUPOS).map(r => ({ nome: r[0] })),
     subgrupos: linhas(ABAS.SUBGRUPOS).map(r => ({ grupo: r[0], nome: r[1] })),
     locais: linhas(ABAS.LOCAIS).map(r => r[0]),
     situacoes: linhas(ABAS.SITUACOES).map(r => r[0]),
-    desincorporados: linhas(ABAS.DES).map(r => ({ data: r[0], patrimonio: r[2], descricao: r[3] })),
+    desincorporados: des.map(r => ({ data: r[0], patrimonio: r[2], descricao: r[2 + iDesc] })),
   };
 }
 
@@ -428,15 +436,162 @@ function urlDaCelula(cel) {
 /** Linhas de Bens com o endereço real da foto (e não o texto "FOTO"). */
 function linhasBens(ss) {
   const sh = ss.getSheetByName(ABAS.BENS);
+  const iStatus = CABECALHOS[ABAS.BENS].indexOf('Status');
+  // Só as linhas de bem (pula títulos de setor, linhas em branco e a linha "Ordenar por")
+  return linhasComFoto(sh).filter(r => texto(r[0]) && texto(r[iStatus]));
+}
+
+/** Todas as linhas (da 2ª em diante) com o endereço real da foto na coluna "Foto". */
+function linhasComFoto(sh) {
   if (!sh || sh.getLastRow() < 2) return [];
   const n = sh.getLastRow() - 1;
   const r = sh.getRange(2, 1, n, sh.getLastColumn()).getDisplayValues();
-  const col = CABECALHOS[ABAS.BENS].indexOf('Foto');
+  const col = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].indexOf('Foto');
+  if (col < 0) return r;
   sh.getRange(2, col + 1, n, 1).getRichTextValues().forEach((x, i) => {
     const url = x[0] && x[0].getLinkUrl();
     if (url) r[i][col] = url;
   });
   return r;
+}
+
+/** Os campos de um bem (linha da aba Bens), com o endereço real da foto. */
+function valoresDoBem(sh, linha) {
+  const v = sh.getRange(linha, 1, 1, CAMPOS.length).getDisplayValues()[0];
+  const iFoto = CAMPOS.findIndex(c => c[0] === 'foto');
+  v[iFoto] = urlDaCelula(sh.getRange(linha, iFoto + 1));
+  return v;
+}
+
+// ───────────────────────── Aba Bens organizada por setor ─────────────────────────
+
+const ORDENS_BENS = {
+  'Descrição': ['descricao', 'grupo', 'subgrupo'],
+  'Grupo': ['grupo', 'subgrupo', 'descricao'],
+  'Subgrupo': ['subgrupo', 'descricao'],
+};
+const COR_SETOR = '#fff2cc';
+
+/**
+ * Reescreve a aba Bens: setores em ordem alfabética, cada um com título, seus bens e uma linha amarela no fim,
+ * e uma linha em branco entre setores. Dentro do setor, ordena pelo que estiver em "Ordenar por" (B2).
+ * Lê os bens da própria aba, então mudanças feitas à mão nas linhas dos bens são mantidas.
+ */
+function organizarBens(ss) {
+  ss = ss || planilha();
+  const sh = ss.getSheetByName(ABAS.BENS);
+  if (!sh) return;
+  const cab = CABECALHOS[ABAS.BENS];
+  const L = cab.length;
+  const iStatus = cab.indexOf('Status');
+  const iLocal = cab.indexOf('Localização');
+  const iFoto = cab.indexOf('Foto');
+  const bens = linhasBens(ss).filter(r => r[iStatus] !== 'DESINCORPORADO').map(r => r.slice(0, L));
+
+  // Linha 2: escolha da ordem
+  let ordem = texto(sh.getRange('B2').getDisplayValue());
+  if (!ORDENS_BENS[ordem]) ordem = 'Descrição';
+  const idx = (k) => CAMPOS.findIndex(c => c[0] === k);
+  const chaves = ORDENS_BENS[ordem].map(idx);
+  const cmp = (a, b) => String(a).localeCompare(String(b), 'pt-BR', { sensitivity: 'base', numeric: true });
+
+  // Agrupa por setor (sem diferenciar maiúsculas); "SEM SETOR" fica por último
+  const grupos = {};
+  bens.forEach(r => {
+    const k = texto(r[iLocal]).toUpperCase() || '~SEM SETOR';
+    (grupos[k] = grupos[k] || []).push(r);
+  });
+  const setores = Object.keys(grupos).sort(cmp);
+
+  const vazio = () => new Array(L).fill('');
+  const linhas = [vazio()]; // linha 3 em branco
+  const titulos = [], amarelas = [];
+  setores.forEach(k => {
+    const t = vazio(); t[0] = k === '~SEM SETOR' ? 'SEM SETOR' : k;
+    titulos.push(3 + linhas.length); linhas.push(t);
+    grupos[k].sort((a, b) => {
+      for (const c of chaves) { const d = cmp(a[c], b[c]); if (d) return d; }
+      return cmp(a[0], b[0]);
+    }).forEach(r => linhas.push(r.map(fixo)));
+    amarelas.push(3 + linhas.length); linhas.push(vazio());
+    linhas.push(vazio());
+  });
+
+  // Limpa da linha 2 para baixo (na 1ª vez a linha 2 ainda tem um bem do formato antigo) e escreve tudo de uma vez
+  const fim = Math.max(sh.getLastRow(), 3);
+  sh.getRange(2, 1, fim - 1, sh.getMaxColumns()).clear();
+  const precisa = 2 + linhas.length;
+  if (sh.getMaxRows() < precisa) sh.insertRowsAfter(sh.getMaxRows(), precisa - sh.getMaxRows());
+  sh.getRange(3, 1, linhas.length, L).setValues(linhas);
+
+  const a1 = (r) => 'A' + r + ':' + String.fromCharCode(64 + L) + r;
+  if (titulos.length) sh.getRangeList(titulos.map(a1)).setBackground(COR_SETOR).setFontWeight('bold');
+  if (amarelas.length) sh.getRangeList(amarelas.map(a1)).setBackground(COR_SETOR);
+
+  // Foto como "FOTO" com link, numa chamada só
+  sh.getRange(3, iFoto + 1, linhas.length, 1).setRichTextValues(linhas.map(r => {
+    const url = String(r[iFoto]).replace(/^'/, '');
+    const rt = SpreadsheetApp.newRichTextValue();
+    return [EH_FOTO.test(url) ? rt.setText('FOTO').setLinkUrl(url).build() : rt.setText(url).build()];
+  }));
+
+  // Linha 2: "Ordenar por" com lista
+  sh.getRange('A2').setValue('Ordenar por:').setFontWeight('bold');
+  sh.getRange('B2').setValue(ordem).setFontWeight('bold').setBackground('#fff3c4')
+    .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(Object.keys(ORDENS_BENS), true).setAllowInvalid(false).build());
+  sh.getRange('C2').setValue('← como ordenar os bens dentro de cada setor').setFontColor('#888888');
+  sh.setFrozenRows(2);
+
+  ajustarLarguras(sh);
+  sh.setColumnWidth(1, 110); // o nome do setor passa por cima das colunas vizinhas
+}
+
+function organizarBensMenu() {
+  organizarBens(SpreadsheetApp.getActiveSpreadsheet());
+}
+
+/**
+ * Desincorporações passam a guardar todas as informações do bem, e o bem sai da aba Bens.
+ * Converte a aba antiga (Data, Hora, Nº, Descrição, Lançado, ID) e tira de Bens os já desincorporados. Roda uma vez.
+ */
+function migrarDesincorporados() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('MIGRACAO_DES') === 'feito') return;
+  const ss = planilha();
+  const sh = ss.getSheetByName(ABAS.DES);
+  const novo = CABECALHOS[ABAS.DES];
+  if (sh) {
+    const atual = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getDisplayValues()[0];
+    if (atual.join('|') === ['Data', 'Hora', 'Nº Patrimônio', 'Descrição', LANCADO, 'ID'].join('|')) {
+      const iDesc = ROTULOS.indexOf('Descrição');                    // posição da descrição entre os campos
+      sh.insertColumnsAfter(3, iDesc - 1);                           // campos entre o nº e a descrição
+      sh.insertColumnsAfter(3 + iDesc, ROTULOS.length - iDesc - 1);  // campos depois da descrição
+    }
+    sh.getRange(1, 1, 1, novo.length).setValues([novo]).setFontWeight('bold').setBackground('#1f4e5f').setFontColor('#ffffff');
+  }
+  // Bens marcados DESINCORPORADO: completa a linha em Desincorporações e tira de Bens
+  const bensSh = ss.getSheetByName(ABAS.BENS);
+  const iStatus = CABECALHOS[ABAS.BENS].indexOf('Status');
+  if (bensSh && sh && bensSh.getLastRow() > 1) {
+    const vals = linhasComFoto(bensSh); // linha i = linha i + 2 da aba
+    const desNums = sh.getLastRow() > 1 ? sh.getRange(2, 3, sh.getLastRow() - 1, 1).getDisplayValues().map(r => chaveNum(r[0])) : [];
+    for (let i = vals.length - 1; i >= 0; i--) {
+      const r = vals[i];
+      if (r[iStatus] !== 'DESINCORPORADO') continue;
+      const campos = r.slice(0, CAMPOS.length);
+      const j = desNums.indexOf(chaveNum(r[0]));
+      if (j >= 0) {
+        sh.getRange(j + 2, 3, 1, campos.length).setValues([campos.map(fixo)]);
+        mascararFotos(sh.getRange(j + 2, 3, 1, campos.length));
+      } else {
+        const m = momento();
+        registrar(ABAS.DES, [m.data, m.hora, ...campos, false, '']);
+      }
+      bensSh.deleteRow(i + 2);
+    }
+  }
+  props.setProperty('MIGRACAO_DES', 'feito');
+  organizarBens(ss);
 }
 
 /** Data/hora da operação no fuso da planilha. Usa o horário em que foi feita no celular (mesmo se enviada depois). */
@@ -539,6 +694,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Patrimônio')
     .addItem('Configurar planilha', 'configurarPlanilha')
     .addItem('Atualizar Consulta e Por Setor', 'atualizarVisoesMenu')
+    .addItem('Organizar aba Bens por setor', 'organizarBensMenu')
     .addItem('Mostrar abas de cadastro', 'mostrarCadastros')
     .addItem('Mostrar token do app', 'mostrarToken')
     .addToUi();
@@ -550,6 +706,7 @@ function configurarPlanilha() {
   props.setProperty('PLANILHA_ID', ss.getId());
   migrarPlanilha(); // antes de gravar os cabeçalhos novos
   migrarFotos();
+  migrarDesincorporados();
 
   Object.keys(CABECALHOS).forEach(nome => {
     const cab = CABECALHOS[nome];
@@ -630,8 +787,10 @@ function configurarPorSetor(ss) {
 
 /** Gatilho simples: ao digitar na célula B1 de Consulta ou Por Setor, preenche a aba. */
 function onEdit(e) {
-  if (!e || e.range.getA1Notation() !== 'B1') return;
+  if (!e) return;
   const nome = e.range.getSheet().getName();
+  if (nome === ABAS.BENS && e.range.getA1Notation() === 'B2') return organizarBens(e.source);
+  if (e.range.getA1Notation() !== 'B1') return;
   if (nome === ABAS.CONSULTA) preencherConsulta(e.source);
   if (nome === ABAS.SETOR) preencherPorSetor(e.source);
 }
@@ -710,8 +869,9 @@ function preencherConsulta(ss) {
     hist.push([r[0], r[1], 'Incorporação', r[cabInc.indexOf('Descrição')] + ' – ' + r[cabInc.indexOf('Localização')]]));
   linhasDe(ss, ABAS.ALT).filter(r => mesmo(r[2])).forEach(r =>
     hist.push([r[0], r[1], 'Alteração', r[4] + ': ' + (r[5] || '(vazio)') + ' → ' + (r[6] || '(vazio)')]));
+  const iDesDesc = CABECALHOS[ABAS.DES].indexOf('Descrição');
   linhasDe(ss, ABAS.DES).filter(r => mesmo(r[2])).forEach(r =>
-    hist.push([r[0], r[1], 'Desincorporação', r[3]]));
+    hist.push([r[0], r[1], 'Desincorporação', r[iDesDesc]]));
   const ordem = (r) => r[0].split('/').reverse().join('') + r[1];
   hist.sort((a, b) => ordem(a).localeCompare(ordem(b)));
 
